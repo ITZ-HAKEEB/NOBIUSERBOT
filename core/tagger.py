@@ -187,15 +187,26 @@ class TaggerEngine:
         reply_to_message_id: Optional[int]
     ):
         """Constructs and delivers a single batch of mentions."""
-        if mode == "emoji":
-            mentions_str = " ".join([f"{random.choice(EMOJIS)} {m}" for m in batch])
-            text = f"{custom_text}\n\n{mentions_str}" if custom_text else mentions_str
-        elif mode == "admin":
-            mentions_str = "\n".join([f"👮‍♂️ {m}" for m in batch])
-            text = f"🚨 **Admins Call:** {custom_text}\n\n{mentions_str}" if custom_text else f"🚨 **Admins:**\n\n{mentions_str}"
+        if len(batch) == 1:
+            user_mention = batch[0]
+            if mode == "emoji":
+                emoji = random.choice(EMOJIS)
+                text = f"{emoji} {user_mention} {custom_text}".strip() if custom_text else f"{emoji} {user_mention}"
+            elif mode == "admin":
+                text = f"🚨 👮‍♂️ {user_mention} — {custom_text}" if custom_text else f"🚨 👮‍♂️ {user_mention}"
+            else:
+                text = f"{custom_text} {user_mention}".strip() if custom_text else user_mention
         else:
-            mentions_str = ", ".join(batch)
-            text = f"{custom_text}\n\n{mentions_str}" if custom_text else mentions_str
+            if mode == "emoji":
+                mentions_str = " ".join([f"{random.choice(EMOJIS)} {m}" for m in batch])
+                text = f"{custom_text}\n\n{mentions_str}" if custom_text else mentions_str
+            elif mode == "admin":
+                mentions_str = "\n".join([f"👮‍♂️ {m}" for m in batch])
+                text = f"🚨 **Admins Call:** {custom_text}\n\n{mentions_str}" if custom_text else f"🚨 **Admins:**\n\n{mentions_str}"
+            else:
+                mentions_str = ", ".join(batch)
+                text = f"{custom_text}\n\n{mentions_str}" if custom_text else mentions_str
+
 
         while True:
             try:

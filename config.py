@@ -15,8 +15,9 @@ except ValueError:
 DEFAULT_STRING_SESSION = os.getenv("DEFAULT_STRING_SESSION", "").strip()
 
 TAG_DELAY = float(os.getenv("TAG_DELAY", "2.5"))
-USERS_PER_TAG = int(os.getenv("USERS_PER_TAG", "5"))
+USERS_PER_TAG = int(os.getenv("USERS_PER_TAG", "1"))
 DATABASE_PATH = os.getenv("DATABASE_PATH", "tagger_bot.db")
+
 
 def is_configured() -> bool:
     """Check if mandatory credentials are set."""
