@@ -115,6 +115,8 @@ class ClientManager:
 
         @client.on_message(filters.me & filters.command(["tag", "utag"], prefixes=[".", "!", "/"]))
         async def _self_tag_handler(c: Client, m: Message):
+            if m.chat.id > 0:
+                return await m.reply_text("⚠️ **`Tagging can only be used in groups!`**")
             custom_text = m.text.split(None, 1)[1] if len(m.text.split()) > 1 else "Hey everyone! 👋"
             reply_id = m.reply_to_message_id if m.reply_to_message else None
             await tagger_engine.start_tagging(
@@ -128,6 +130,8 @@ class ClientManager:
 
         @client.on_message(filters.me & filters.command(["etag"], prefixes=[".", "!", "/"]))
         async def _self_etag_handler(c: Client, m: Message):
+            if m.chat.id > 0:
+                return await m.reply_text("⚠️ **`Tagging can only be used in groups!`**")
             custom_text = m.text.split(None, 1)[1] if len(m.text.split()) > 1 else ""
             reply_id = m.reply_to_message_id if m.reply_to_message else None
             await tagger_engine.start_tagging(
@@ -141,6 +145,8 @@ class ClientManager:
 
         @client.on_message(filters.me & filters.command(["admintag"], prefixes=[".", "!", "/"]))
         async def _self_admintag_handler(c: Client, m: Message):
+            if m.chat.id > 0:
+                return await m.reply_text("⚠️ **`Tagging can only be used in groups!`**")
             custom_text = m.text.split(None, 1)[1] if len(m.text.split()) > 1 else "Attention Admins! 🚨"
             reply_id = m.reply_to_message_id if m.reply_to_message else None
             await tagger_engine.start_tagging(
@@ -152,7 +158,24 @@ class ClientManager:
                 reply_to_message_id=reply_id
             )
 
+        @client.on_message(filters.me & filters.command(["ftag", "favtag"], prefixes=[".", "!", "/"]))
+        async def _self_ftag_handler(c: Client, m: Message):
+            if m.chat.id > 0:
+                return await m.reply_text("⚠️ **`Tagging can only be used in groups!`**")
+            custom_text = m.text.split(None, 1)[1] if len(m.text.split()) > 1 else "Hey bestie! ⭐"
+            reply_id = m.reply_to_message_id if m.reply_to_message else None
+            await tagger_engine.start_tagging(
+                client=c,
+                chat_id=m.chat.id,
+                initiated_by=m.from_user.id,
+                mode="fav",
+                custom_text=custom_text,
+                reply_to_message_id=reply_id
+            )
+
+
         @client.on_message(filters.me & filters.command(["stop", "cancel"], prefixes=[".", "!", "/"]))
+
         async def _self_stop_handler(c: Client, m: Message):
             stopped = await tagger_engine.stop_tagging(m.chat.id)
             if stopped:

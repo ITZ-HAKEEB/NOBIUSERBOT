@@ -94,27 +94,45 @@ class TaggerEngine:
             except Exception as e:
                 logger.warning(f"Could not send start banner in {chat_id}: {e}")
 
-            # Fetch members generator
-            if mode == "admin":
-                members_iter = client.get_chat_members(chat_id, filter=enums.ChatMembersFilter.ADMINISTRATORS)
-            else:
-                members_iter = client.get_chat_members(chat_id)
+            # Fetch members stream
+            if mode == "fav":
+                from database.db import get_favorite_users
+                fav_users = await get_favorite_users(initiated_by)
+                if not fav_users:
+                    await client.send_message(
+                        chat_id,
+                        "⚠️ **`[ No Favorite Users Saved! ]`**\n\n"
+                        "**`Add your favorite users first using /addfav @username or reply with /addfav.`**"
+                    )
+                    return
 
-            async for member in members_iter:
+                async def _fav_gen():
+                    for f in fav_users:
+                        yield f["fav_user_id"], f["fav_first_name"]
+                members_stream = _fav_gen()
+            elif mode == "admin":
+                async def _admin_gen():
+                    async for m in client.get_chat_members(chat_id, filter=enums.ChatMembersFilter.ADMINISTRATORS):
+                        if m.user and not m.user.is_deleted:
+                            yield m.user.id, m.user.first_name
+                members_stream = _admin_gen()
+            else:
+                async def _all_gen():
+                    async for m in client.get_chat_members(chat_id):
+                        if m.user and not m.user.is_deleted and not m.user.is_bot:
+                            yield m.user.id, m.user.first_name
+                members_stream = _all_gen()
+
+            delay = min(config.TAG_DELAY, 1.8) if mode == "fav" else config.TAG_DELAY
+
+            async for uid, first_name in members_stream:
                 if self.stop_requested.get(chat_id, False):
                     is_cancelled = True
                     break
 
-                u = member.user
-                if not u or u.is_deleted:
-                    continue
-                # For non-admin mode, skip bot accounts
-                if mode != "admin" and u.is_bot:
-                    continue
-
                 # Prepare mention
-                clean_name = (u.first_name or "Member").replace("[", "").replace("]", "")
-                mention = f"[{clean_name}](tg://user?id={u.id})"
+                clean_name = (first_name or "Member").replace("[", "").replace("]", "")
+                mention = f"[{clean_name}](tg://user?id={uid})"
                 batch.append(mention)
 
                 if len(batch) >= config.USERS_PER_TAG:
@@ -132,7 +150,8 @@ class TaggerEngine:
                     )
                     tagged_count += len(batch)
                     batch = []
-                    await asyncio.sleep(config.TAG_DELAY)
+                    await asyncio.sleep(delay)
+
 
             # Process remaining members in the last chunk
             if batch and not is_cancelled and not self.stop_requested.get(chat_id, False):
@@ -189,7 +208,9 @@ class TaggerEngine:
         """Constructs and delivers a single batch of mentions."""
         if len(batch) == 1:
             user_mention = batch[0]
-            if mode == "emoji":
+            if mode == "fav":
+                text = f"⭐ 💖 {user_mention} — {custom_text}".strip() if custom_text else f"⭐ 💖 {user_mention}!"
+            elif mode == "emoji":
                 emoji = random.choice(EMOJIS)
                 text = f"{emoji} {user_mention} {custom_text}".strip() if custom_text else f"{emoji} {user_mention}"
             elif mode == "admin":
@@ -197,7 +218,10 @@ class TaggerEngine:
             else:
                 text = f"{custom_text} {user_mention}".strip() if custom_text else user_mention
         else:
-            if mode == "emoji":
+            if mode == "fav":
+                mentions_str = " ".join([f"⭐ {m}" for m in batch])
+                text = f"💖 **Favorites:** {custom_text}\n\n{mentions_str}" if custom_text else f"💖 **Favorites:**\n\n{mentions_str}"
+            elif mode == "emoji":
                 mentions_str = " ".join([f"{random.choice(EMOJIS)} {m}" for m in batch])
                 text = f"{custom_text}\n\n{mentions_str}" if custom_text else mentions_str
             elif mode == "admin":
@@ -206,6 +230,7 @@ class TaggerEngine:
             else:
                 mentions_str = ", ".join(batch)
                 text = f"{custom_text}\n\n{mentions_str}" if custom_text else mentions_str
+
 
 
         while True:

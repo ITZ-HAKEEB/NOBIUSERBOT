@@ -107,7 +107,31 @@ async def admintag_group_handler(bot: Client, message: Message):
         await message.reply_text("⚠️ **`A tagging session is already active in this group! Use /stop to cancel.`**")
 
 
+@Client.on_message(filters.command(["ftag", "favtag"]) & filters.group)
+async def ftag_group_handler(bot: Client, message: Message):
+    """Fast tag saved favorite users only."""
+    self_client = await resolve_self_client(bot, message)
+    if not self_client:
+        return
+
+    custom_text = message.text.split(None, 1)[1] if len(message.text.split()) > 1 else "Wake up bestie! ⭐"
+    reply_id = message.reply_to_message_id if message.reply_to_message else None
+
+    started = await tagger_engine.start_tagging(
+        client=self_client,
+        chat_id=message.chat.id,
+        initiated_by=message.from_user.id,
+        mode="fav",
+        custom_text=custom_text,
+        reply_to_message_id=reply_id
+    )
+
+    if not started:
+        await message.reply_text("⚠️ **`A tagging session is already active in this group! Use /stop to cancel.`**")
+
+
 @Client.on_message(filters.command(["stop", "cancel"]) & filters.group)
+
 async def stop_group_handler(bot: Client, message: Message):
     """Stop active tagging in the group."""
     stopped = await tagger_engine.stop_tagging(message.chat.id)

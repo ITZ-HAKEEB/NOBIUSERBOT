@@ -37,7 +37,19 @@ async def init_db():
             )
         """)
 
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS favorite_users (
+                owner_id INTEGER,
+                fav_user_id INTEGER,
+                fav_first_name TEXT,
+                fav_username TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (owner_id, fav_user_id)
+            )
+        """)
+
         await db.commit()
+
 
 async def add_or_update_user(user_id: int, first_name: str, username: Optional[str]):
     async with aiosqlite.connect(DATABASE_PATH) as db:
@@ -146,3 +158,41 @@ async def stop_tagging_db(chat_id: int):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("UPDATE active_tagging SET is_active = 0 WHERE chat_id = ?", (chat_id,))
         await db.commit()
+
+# --- Favorite Users ---
+
+async def add_favorite_user(owner_id: int, fav_user_id: int, fav_first_name: str, fav_username: Optional[str]):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("""
+            INSERT INTO favorite_users (owner_id, fav_user_id, fav_first_name, fav_username)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(owner_id, fav_user_id) DO UPDATE SET
+                fav_first_name = excluded.fav_first_name,
+                fav_username = excluded.fav_username
+        """, (owner_id, fav_user_id, fav_first_name, fav_username))
+        await db.commit()
+
+async def remove_favorite_user(owner_id: int, fav_user_id: int) -> bool:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            "DELETE FROM favorite_users WHERE owner_id = ? AND fav_user_id = ?",
+            (owner_id, fav_user_id)
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
+async def get_favorite_users(owner_id: int) -> List[Dict[str, Any]]:
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM favorite_users WHERE owner_id = ? ORDER BY created_at ASC",
+            (owner_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+async def clear_favorite_users(owner_id: int):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("DELETE FROM favorite_users WHERE owner_id = ?", (owner_id,))
+        await db.commit()
+

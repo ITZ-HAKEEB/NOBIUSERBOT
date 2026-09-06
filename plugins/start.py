@@ -20,16 +20,25 @@ START_TEXT = """
 HELP_TEXT = """
 📖 **`[ Cᴏᴍᴍᴀɴᴅs & Usᴀɢᴇ Gᴜɪᴅᴇ ]`**
 
-👥 **`Group Commands (Bot or Self ID):`**
+👥 **`Group Tagging Commands:`**
 • **`/tag <text>`** `— Tag members in clean batches`
 • **`/utag <text>`** `— Alias for /tag`
 • **`/etag <text>`** `— Tag with randomized emojis`
 • **`/admintag <text>`** `— Mention group admins only`
 • **`/stop`** `— Instantly cancel active tagging`
 
+⭐ **`Favorite Users & Fast Tag:`**
+• **`/ftag <text>`** `— Fast tag only your favorite users`
+• **`.ftag <text>`** `— Direct account fast tag`
+• **`/addfav <@user>`** `— Add a user to your favorites`
+• **`/remfav <@user>`** `— Remove a user from favorites`
+• **`/favs`** `— List all saved favorite users`
+• **`/clearfavs`** `— Clear all favorite users`
+
 ⚡ **`Direct Account Prefixes:`**
 • **`.tag <text>`**
 • **`.etag <text>`**
+• **`.ftag <text>`**
 • **`.admintag <text>`**
 • **`.stop`**
 
@@ -56,14 +65,18 @@ def get_start_buttons():
             InlineKeyboardButton(f"⚡ {to_mono('Generate Session String')}", callback_data="btn_gen_session")
         ],
         [
-            InlineKeyboardButton(f"🔑 {to_mono('Connect Self ID')}", callback_data="btn_connect"),
-            InlineKeyboardButton(f"📖 {to_mono('Commands')}", callback_data="btn_help")
+            InlineKeyboardButton(f"⭐ {to_mono('Favorite Users')}", callback_data="btn_favs"),
+            InlineKeyboardButton(f"🔑 {to_mono('Connect Self ID')}", callback_data="btn_connect")
         ],
         [
-            InlineKeyboardButton(f"ℹ️ {to_mono('About')}", callback_data="btn_about"),
+            InlineKeyboardButton(f"📖 {to_mono('Commands')}", callback_data="btn_help"),
+            InlineKeyboardButton(f"ℹ️ {to_mono('About')}", callback_data="btn_about")
+        ],
+        [
             InlineKeyboardButton(f"👤 {to_mono('My Account')}", callback_data="btn_myaccount")
         ]
     ])
+
 
 def get_back_button():
     return InlineKeyboardMarkup([
@@ -131,6 +144,30 @@ async def callback_handler(client: Client, query: CallbackQuery):
             [InlineKeyboardButton(f"🔙 {to_mono('Back to Menu')}", callback_data="btn_back")]
         ])
         await query.message.edit_text(connect_instructions, reply_markup=markup)
+    elif data == "btn_favs":
+        from database.db import get_favorite_users
+        favs = await get_favorite_users(user_id)
+        if not favs:
+            fav_text = (
+                "⭐ **`[ Favorite Users ]`**\n\n"
+                "**`You have no favorite users saved yet!`**\n\n"
+                "💡 **`How to add your favorites:`**\n"
+                "• **`/addfav @username`**\n"
+                "• **`Or reply to their message with /addfav`**\n\n"
+                "⚡ **`Fast Tag in any group:`**\n"
+                "• **`/ftag <message>`** `— Fast tag via Bot`\n"
+                "• **`.ftag <message>`** `— Fast tag via your account`"
+            )
+        else:
+            lines = [f"⭐ **`[ Your Favorite Users ({len(favs)}) ]`**\n"]
+            for i, f in enumerate(favs, 1):
+                clean_name = (f["fav_first_name"] or "Friend").replace("[", "").replace("]", "")
+                uname_str = f"@{f['fav_username']}" if f["fav_username"] else "No username"
+                lines.append(f"{i}. [{clean_name}](tg://user?id={f['fav_user_id']}) — `{uname_str}`")
+            lines.append("\n⚡ **`Fast-tag them anytime in groups with /ftag or .ftag!`**")
+            fav_text = "\n".join(lines)
+
+        await query.message.edit_text(fav_text, reply_markup=get_back_button(), disable_web_page_preview=True)
     elif data == "btn_myaccount":
         user_info = await get_user(user_id)
         if user_info and user_info.get("string_session"):
@@ -151,3 +188,4 @@ async def callback_handler(client: Client, query: CallbackQuery):
         await query.message.edit_text(status_text, reply_markup=get_back_button())
 
     await query.answer()
+
