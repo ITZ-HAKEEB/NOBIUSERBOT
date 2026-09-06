@@ -84,10 +84,10 @@ class TaggerEngine:
             
             # Announce start
             start_banner = (
-                f"🚀 **Self ID Tagger Started!**\n"
-                f"📝 Mode: `{mode.upper()}`\n"
-                f"💬 Message: `{custom_text or 'Default Mention'}`\n"
-                f"💡 Type `/stop` or `.stop` anytime to cancel."
+                f"🚀 **`[ Self ID Tagger Started! ]`**\n"
+                f"📝 **`Mode:`** `{mode.upper()}`\n"
+                f"💬 **`Message:`** `{custom_text or 'Default Mention'}`\n"
+                f"💡 **`Type /stop or .stop anytime to cancel.`**"
             )
             try:
                 await client.send_message(chat_id, start_banner, reply_to_message_id=reply_to_message_id)
@@ -167,14 +167,15 @@ class TaggerEngine:
 
             # Send final report
             report = (
-                f"🛑 **Tagging stopped!** Tagged `{tagged_count}` members."
+                f"🛑 **`[ Tagging stopped! Tagged {tagged_count} members. ]`**"
                 if is_cancelled
-                else f"✅ **Tagging finished!** Successfully tagged `{tagged_count}` members."
+                else f"✅ **`[ Tagging finished! Successfully tagged {tagged_count} members. ]`**"
             )
             try:
                 await client.send_message(chat_id, report)
             except Exception:
                 pass
+
 
     async def _send_tag_batch(
         self,

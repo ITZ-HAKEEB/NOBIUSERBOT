@@ -26,12 +26,13 @@ async def login_session_handler(bot: Client, message: Message):
 
     if len(parts) < 2:
         return await message.reply_text(
-            "⚠️ **Usage:**\n`/login <your_pyrogram_string_session>`\n\n"
-            "Or use `/login_phone` to log in step-by-step with your phone number and OTP."
+            "⚠️ **`[ Usage ]`**\n"
+            "• **`/login <your_pyrogram_string_session>`**\n\n"
+            "💡 **`Or use /gen_session to generate an OTP session directly in chat.`**"
         )
 
     session_string = parts[1].strip()
-    status_msg = await message.reply_text("🔄 **Verifying your session string...**")
+    status_msg = await message.reply_text("🔄 **`Verifying your session string...`**")
 
     try:
         test_client = Client(
@@ -58,17 +59,17 @@ async def login_session_handler(bot: Client, message: Message):
         await client_manager.start_user_client(user_id, session_string)
 
         await status_msg.edit_text(
-            f"✅ **Self ID Connected Successfully!**\n\n"
-            f"👤 **Name**: {me.first_name}\n"
-            f"🆔 **ID**: `{me.id}`\n"
-            f"🔗 **Username**: @{me.username or 'None'}\n\n"
-            f"You can now add this account and the bot to your groups and use `/tag` or `.tag`!"
+            "✅ **`[ Self ID Connected Successfully! ]`**\n\n"
+            f"👤 **`Name:`** `{me.first_name}`\n"
+            f"🆔 **`ID:`** `{me.id}`\n"
+            f"🔗 **`Username:`** `@{me.username or 'None'}`\n\n"
+            "**`Your account is ready! Add it to groups and use /tag or .tag.`**"
         )
     except errors.AuthKeyInvalid:
-        await status_msg.edit_text("❌ **Failed:** Session string is invalid or expired.")
+        await status_msg.edit_text("❌ **`Failed: Session string is invalid or expired.`**")
     except Exception as e:
         logger.error(f"Login error for user {user_id}: {e}", exc_info=True)
-        await status_msg.edit_text(f"❌ **Error linking session:** `{e}`")
+        await status_msg.edit_text(f"❌ **`Error linking session:`** `{e}`")
 
 
 async def start_interactive_login(bot: Client, user_id: int, reply_func):
@@ -84,9 +85,10 @@ async def start_interactive_login(bot: Client, user_id: int, reply_func):
     await save_login_state(user_id, phone_number="", phone_code_hash="", step="WAITING_PHONE")
 
     await reply_func(
-        "📱 **Pyrogram Session Generator & Login**\n\n"
-        "Please send your **Phone Number** with country code (e.g. `+1234567890` or `+919876543210`):\n\n"
-        "*(Send `/cancel_login` anytime to abort)*"
+        "📱 **`[ Pyrogram Session Generator & Login ]`**\n\n"
+        "**`Please send your Phone Number with country code:`**\n"
+        "**`Example: +919876543210 or +1234567890`**\n\n"
+        "*(**`Send /cancel_login anytime to abort`**)*"
     )
 
 
@@ -94,7 +96,6 @@ async def start_interactive_login(bot: Client, user_id: int, reply_func):
 async def login_phone_start(bot: Client, message: Message):
     """Start interactive phone login wizard."""
     await start_interactive_login(bot, message.from_user.id, message.reply_text)
-
 
 
 @Client.on_message(filters.command("cancel_login") & filters.private)
@@ -107,7 +108,7 @@ async def cancel_login_handler(bot: Client, message: Message):
         except Exception:
             pass
         temp_login_clients.pop(user_id, None)
-    await message.reply_text("🛑 **Login process cancelled.**")
+    await message.reply_text("🛑 **`Login process cancelled.`**")
 
 
 @Client.on_message(filters.command("myaccount") & filters.private)
@@ -118,20 +119,20 @@ async def myaccount_handler(bot: Client, message: Message):
 
     if not user_info or not user_info.get("string_session"):
         return await message.reply_text(
-            "⚠️ **No Self ID linked!**\n\n"
-            "Use `/login <string_session>` or `/login_phone` to connect your account."
+            "⚠️ **`[ No Self ID Linked! ]`**\n\n"
+            "**`Use /gen_session or /login <string_session> to connect.`**"
         )
 
     is_running = user_id in client_manager.clients and client_manager.clients[user_id].is_connected
-    status_emoji = "🟢 Running" if is_running else "🟡 Disconnected (will reconnect on command)"
+    status_emoji = "🟢 Running" if is_running else "🟡 Disconnected (will auto-reconnect)"
 
     await message.reply_text(
-        f"👤 **Connected Self ID Account**\n\n"
-        f"• **Name**: {user_info.get('self_first_name')}\n"
-        f"• **User ID**: `{user_info.get('self_user_id')}`\n"
-        f"• **Username**: @{user_info.get('self_username') or 'None'}\n"
-        f"• **Status**: {status_emoji}\n\n"
-        f"Send `/logout` if you want to disconnect this account."
+        "👤 **`[ Connected Self ID Account ]`**\n\n"
+        f"• **`Name:`** `{user_info.get('self_first_name')}`\n"
+        f"• **`User ID:`** `{user_info.get('self_user_id')}`\n"
+        f"• **`Username:`** `@{user_info.get('self_username') or 'None'}`\n"
+        f"• **`Status:`** `{status_emoji}`\n\n"
+        "**`Send /logout if you wish to disconnect this account.`**"
     )
 
 
@@ -141,7 +142,7 @@ async def logout_handler(bot: Client, message: Message):
     user_id = message.from_user.id
     await client_manager.stop_user_client(user_id)
     await remove_user_session(user_id)
-    await message.reply_text("🚪 **Logged out successfully!** Your Self ID session has been deleted.")
+    await message.reply_text("🚪 **`Logged out successfully! Your Self ID session has been deleted.`**")
 
 
 # Listener for interactive phone login steps
@@ -159,11 +160,11 @@ async def interactive_login_steps(bot: Client, message: Message):
         phone_number = text.replace(" ", "").replace("-", "")
         if not (phone_number.startswith("+") and phone_number[1:].isdigit() and len(phone_number) >= 8):
             return await message.reply_text(
-                "❌ **Invalid Phone Number format.**\n"
-                "Please make sure it starts with `+` followed by the country code and number (e.g. `+1234567890`):"
+                "❌ **`Invalid Phone Number format.`**\n"
+                "**`Please ensure it starts with + followed by country code (e.g. +919876543210):`**"
             )
 
-        status_msg = await message.reply_text("⏳ **Connecting to Telegram and requesting login code...**")
+        status_msg = await message.reply_text("⏳ **`Requesting Telegram verification code...`**")
         try:
             temp_client = Client(
                 name=f"temp_{user_id}",
@@ -183,30 +184,30 @@ async def interactive_login_steps(bot: Client, message: Message):
             )
 
             await status_msg.edit_text(
-                f"📩 **Telegram sent a login code!**\n\n"
-                f"Check your official Telegram app for the code.\n\n"
-                f"⚠️ **Important:** To prevent Telegram from auto-blocking the code, send it with spaces between digits!\n"
-                f"Example: If code is `12345`, send `1 2 3 4 5`."
+                "📩 **`[ Telegram Code Dispatched! ]`**\n\n"
+                "**`Please check your Telegram app for the login code.`**\n\n"
+                "⚠️ **`IMPORTANT: Send the code with spaces between digits!`**\n"
+                "**`Example: If code is 54321, send: 5 4 3 2 1`**"
             )
         except errors.PhoneNumberInvalid:
-            await status_msg.edit_text("❌ The phone number provided is invalid. Please try `/login_phone` again.")
+            await status_msg.edit_text("❌ **`The phone number entered is invalid. Please try /gen_session again.`**")
             await clear_login_state(user_id)
         except Exception as e:
             logger.error(f"Error requesting code for {user_id}: {e}", exc_info=True)
-            await status_msg.edit_text(f"❌ Error requesting login code: `{e}`")
+            await status_msg.edit_text(f"❌ **`Error requesting login code:`** `{e}`")
             await clear_login_state(user_id)
 
     elif step == "WAITING_OTP":
         otp_code = text.replace(" ", "").replace("-", "")
         if not otp_code.isdigit():
-            return await message.reply_text("❌ The code must contain only numbers. Example: `1 2 3 4 5`")
+            return await message.reply_text("❌ **`Code must contain only digits. Example: 1 2 3 4 5`**")
 
         temp_client = temp_login_clients.get(user_id)
         if not temp_client:
             await clear_login_state(user_id)
-            return await message.reply_text("⚠️ Session expired. Please start over with `/login_phone`.")
+            return await message.reply_text("⚠️ **`Session expired. Please restart with /gen_session.`**")
 
-        status_msg = await message.reply_text("⏳ **Verifying code...**")
+        status_msg = await message.reply_text("⏳ **`Verifying authentication code...`**")
         try:
             await temp_client.sign_in(
                 phone_number=state["phone_number"],
@@ -214,7 +215,7 @@ async def interactive_login_steps(bot: Client, message: Message):
                 phone_code=otp_code
             )
 
-            # Successfully logged in without 2FA!
+            # Successfully logged in without 2FA
             session_str = await temp_client.export_session_string()
             me = await temp_client.get_me()
             await temp_client.disconnect()
@@ -231,13 +232,13 @@ async def interactive_login_steps(bot: Client, message: Message):
             await client_manager.start_user_client(user_id, session_str)
 
             await status_msg.edit_text(
-                f"🎉 **Session Generated & Connected Successfully!**\n\n"
-                f"👤 **Account**: {me.first_name}\n"
-                f"🆔 **ID**: `{me.id}`\n"
-                f"🔗 **Username**: @{me.username or 'None'}\n\n"
-                f"📋 **Your Pyrogram String Session (tap to copy):**\n"
+                "🎉 **`[ Session Generated & Connected Successfully! ]`**\n\n"
+                f"👤 **`Account:`** `{me.first_name}`\n"
+                f"🆔 **`ID:`** `{me.id}`\n"
+                f"🔗 **`Username:`** `@{me.username or 'None'}`\n\n"
+                "📋 **`Your Pyrogram String Session (tap to copy):`**\n"
                 f"```{session_str}```\n\n"
-                f"✅ **Linked as your Self ID!** Your account is now active and ready for `/tag` or `.tag` in groups."
+                "✅ **`Linked as your Self ID! Ready for /tag or .tag in groups.`**"
             )
         except errors.SessionPasswordNeeded:
             await save_login_state(
@@ -247,14 +248,14 @@ async def interactive_login_steps(bot: Client, message: Message):
                 step="WAITING_2FA"
             )
             await status_msg.edit_text(
-                "🔐 **Two-Step Verification (2FA) is enabled on this account.**\n\n"
-                "Please enter your Telegram cloud password to proceed:"
+                "🔐 **`[ 2-Step Verification (2FA) Detected ]`**\n\n"
+                "**`Please send your Telegram cloud password to complete login:`**"
             )
         except (errors.PhoneCodeInvalid, errors.PhoneCodeExpired):
-            await status_msg.edit_text("❌ The code entered is invalid or has expired. Please try entering again or `/cancel_login`:")
+            await status_msg.edit_text("❌ **`Invalid or expired code. Please re-enter or /cancel_login:`**")
         except Exception as e:
             logger.error(f"Error checking OTP for {user_id}: {e}", exc_info=True)
-            await status_msg.edit_text(f"❌ Login error: `{e}`")
+            await status_msg.edit_text(f"❌ **`Login error:`** `{e}`")
             await clear_login_state(user_id)
 
     elif step == "WAITING_2FA":
@@ -262,9 +263,9 @@ async def interactive_login_steps(bot: Client, message: Message):
         temp_client = temp_login_clients.get(user_id)
         if not temp_client:
             await clear_login_state(user_id)
-            return await message.reply_text("⚠️ Session expired. Please start over with `/login_phone`.")
+            return await message.reply_text("⚠️ **`Session expired. Please restart with /gen_session.`**")
 
-        status_msg = await message.reply_text("⏳ **Verifying 2FA password...**")
+        status_msg = await message.reply_text("⏳ **`Verifying 2FA password...`**")
         try:
             await temp_client.check_password(password)
             session_str = await temp_client.export_session_string()
@@ -283,18 +284,18 @@ async def interactive_login_steps(bot: Client, message: Message):
             await client_manager.start_user_client(user_id, session_str)
 
             await status_msg.edit_text(
-                f"🎉 **Session Generated & Connected Successfully!**\n\n"
-                f"👤 **Account**: {me.first_name}\n"
-                f"🆔 **ID**: `{me.id}`\n"
-                f"🔗 **Username**: @{me.username or 'None'}\n\n"
-                f"📋 **Your Pyrogram String Session (tap to copy):**\n"
+                "🎉 **`[ Session Generated & Connected Successfully! ]`**\n\n"
+                f"👤 **`Account:`** `{me.first_name}`\n"
+                f"🆔 **`ID:`** `{me.id}`\n"
+                f"🔗 **`Username:`** `@{me.username or 'None'}`\n\n"
+                "📋 **`Your Pyrogram String Session (tap to copy):`**\n"
                 f"```{session_str}```\n\n"
-                f"✅ **Linked as your Self ID!** Your account is now active and ready for `/tag` or `.tag` in groups."
+                "✅ **`Linked as your Self ID! Ready for /tag or .tag in groups.`**"
             )
 
         except errors.PasswordHashInvalid:
-            await status_msg.edit_text("❌ **Incorrect password.** Please enter the correct 2FA password (or `/cancel_login`):")
+            await status_msg.edit_text("❌ **`Incorrect 2FA password. Please try again (or /cancel_login):`**")
         except Exception as e:
             logger.error(f"2FA error for {user_id}: {e}", exc_info=True)
-            await status_msg.edit_text(f"❌ 2FA verification error: `{e}`")
+            await status_msg.edit_text(f"❌ **`2FA verification error:`** `{e}`")
             await clear_login_state(user_id)

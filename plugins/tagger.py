@@ -14,9 +14,9 @@ async def resolve_self_client(bot: Client, message: Message):
     if not self_client or not self_client.is_connected:
         bot_user = bot.me
         await message.reply_text(
-            "⚠️ **No Self ID Connected!**\n\n"
-            "This bot tags group members using your personal Telegram account (Self ID) to bypass bot limitations.\n\n"
-            f"👉 [Click here to connect](https://t.me/{bot_user.username}?start=connect) or send `/login` in my PM!",
+            "⚠️ **`[ No Self ID Connected! ]`**\n\n"
+            "**`This bot uses your personal Telegram account to tag group members without limits.`**\n\n"
+            f"👉 [**`Click here to connect in PM`**](https://t.me/{bot_user.username}?start=connect) **`or send /gen_session!`**",
             disable_web_page_preview=True
         )
         return None
@@ -28,8 +28,8 @@ async def resolve_self_client(bot: Client, message: Message):
         me = self_client.me
         name = me.first_name if me else "Your account"
         await message.reply_text(
-            f"⚠️ **Self ID is not in this group!**\n\n"
-            f"Your linked account **{name}** must join this group before it can tag members."
+            f"⚠️ **`[ Self ID Missing from Group! ]`**\n\n"
+            f"**`Your linked account`** `{name}` **`must join this group before tagging members.`**"
         )
         return None
     except Exception as e:
@@ -58,7 +58,7 @@ async def tag_group_handler(bot: Client, message: Message):
     )
 
     if not started:
-        await message.reply_text("⚠️ A tagging session is already active in this group! Use `/stop` to end it first.")
+        await message.reply_text("⚠️ **`A tagging session is already active in this group! Use /stop to cancel.`**")
 
 
 @Client.on_message(filters.command("etag") & filters.group)
@@ -81,7 +81,7 @@ async def etag_group_handler(bot: Client, message: Message):
     )
 
     if not started:
-        await message.reply_text("⚠️ A tagging session is already active in this group! Use `/stop` to end it first.")
+        await message.reply_text("⚠️ **`A tagging session is already active in this group! Use /stop to cancel.`**")
 
 
 @Client.on_message(filters.command("admintag") & filters.group)
@@ -104,7 +104,7 @@ async def admintag_group_handler(bot: Client, message: Message):
     )
 
     if not started:
-        await message.reply_text("⚠️ A tagging session is already active in this group! Use `/stop` to end it first.")
+        await message.reply_text("⚠️ **`A tagging session is already active in this group! Use /stop to cancel.`**")
 
 
 @Client.on_message(filters.command(["stop", "cancel"]) & filters.group)
@@ -112,6 +112,6 @@ async def stop_group_handler(bot: Client, message: Message):
     """Stop active tagging in the group."""
     stopped = await tagger_engine.stop_tagging(message.chat.id)
     if stopped:
-        await message.reply_text("🛑 **Tagging cancelled.**")
+        await message.reply_text("🛑 **`Tagging has been cancelled successfully.`**")
     else:
-        await message.reply_text("ℹ️ No active tagging session running in this group.")
+        await message.reply_text("ℹ️ **`No active tagging session running in this group.`**")
