@@ -71,12 +71,8 @@ async def login_session_handler(bot: Client, message: Message):
         await status_msg.edit_text(f"❌ **Error linking session:** `{e}`")
 
 
-@Client.on_message(filters.command("login_phone") & filters.private)
-async def login_phone_start(bot: Client, message: Message):
-    """Start interactive phone login wizard."""
-    user_id = message.from_user.id
-
-    # Clean up previous state if any
+async def start_interactive_login(bot: Client, user_id: int, reply_func):
+    """Reusable starter for in-bot phone login / session generation."""
     await clear_login_state(user_id)
     if user_id in temp_login_clients:
         try:
@@ -87,11 +83,18 @@ async def login_phone_start(bot: Client, message: Message):
 
     await save_login_state(user_id, phone_number="", phone_code_hash="", step="WAITING_PHONE")
 
-    await message.reply_text(
-        "📱 **Interactive Self ID Login**\n\n"
+    await reply_func(
+        "📱 **Pyrogram Session Generator & Login**\n\n"
         "Please send your **Phone Number** with country code (e.g. `+1234567890` or `+919876543210`):\n\n"
         "*(Send `/cancel_login` anytime to abort)*"
     )
+
+
+@Client.on_message(filters.command(["login_phone", "generate", "gen_session"]) & filters.private)
+async def login_phone_start(bot: Client, message: Message):
+    """Start interactive phone login wizard."""
+    await start_interactive_login(bot, message.from_user.id, message.reply_text)
+
 
 
 @Client.on_message(filters.command("cancel_login") & filters.private)
@@ -142,7 +145,7 @@ async def logout_handler(bot: Client, message: Message):
 
 
 # Listener for interactive phone login steps
-@Client.on_message(filters.private & ~filters.command(["login", "login_phone", "cancel_login", "start", "help", "myaccount", "logout"]))
+@Client.on_message(filters.private & ~filters.command(["login", "login_phone", "generate", "gen_session", "cancel_login", "start", "help", "myaccount", "logout"]))
 async def interactive_login_steps(bot: Client, message: Message):
     user_id = message.from_user.id
     state = await get_login_state(user_id)
@@ -228,11 +231,13 @@ async def interactive_login_steps(bot: Client, message: Message):
             await client_manager.start_user_client(user_id, session_str)
 
             await status_msg.edit_text(
-                f"🎉 **Login Successful!**\n\n"
-                f"👤 **Name**: {me.first_name}\n"
+                f"🎉 **Session Generated & Connected Successfully!**\n\n"
+                f"👤 **Account**: {me.first_name}\n"
                 f"🆔 **ID**: `{me.id}`\n"
                 f"🔗 **Username**: @{me.username or 'None'}\n\n"
-                f"Your Self ID account is connected and ready to tag in groups!"
+                f"📋 **Your Pyrogram String Session (tap to copy):**\n"
+                f"```{session_str}```\n\n"
+                f"✅ **Linked as your Self ID!** Your account is now active and ready for `/tag` or `.tag` in groups."
             )
         except errors.SessionPasswordNeeded:
             await save_login_state(
@@ -278,12 +283,15 @@ async def interactive_login_steps(bot: Client, message: Message):
             await client_manager.start_user_client(user_id, session_str)
 
             await status_msg.edit_text(
-                f"🎉 **Login Successful!**\n\n"
-                f"👤 **Name**: {me.first_name}\n"
+                f"🎉 **Session Generated & Connected Successfully!**\n\n"
+                f"👤 **Account**: {me.first_name}\n"
                 f"🆔 **ID**: `{me.id}`\n"
                 f"🔗 **Username**: @{me.username or 'None'}\n\n"
-                f"Your Self ID account is connected and ready to tag in groups!"
+                f"📋 **Your Pyrogram String Session (tap to copy):**\n"
+                f"```{session_str}```\n\n"
+                f"✅ **Linked as your Self ID!** Your account is now active and ready for `/tag` or `.tag` in groups."
             )
+
         except errors.PasswordHashInvalid:
             await status_msg.edit_text("❌ **Incorrect password.** Please enter the correct 2FA password (or `/cancel_login`):")
         except Exception as e:

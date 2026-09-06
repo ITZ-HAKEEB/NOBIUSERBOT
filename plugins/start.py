@@ -55,6 +55,9 @@ ABOUT_TEXT = """
 def get_start_buttons():
     return InlineKeyboardMarkup([
         [
+            InlineKeyboardButton("⚡ Generate Session String", callback_data="btn_gen_session")
+        ],
+        [
             InlineKeyboardButton("🔑 Connect Self ID", callback_data="btn_connect"),
             InlineKeyboardButton("📖 Commands", callback_data="btn_help")
         ],
@@ -98,16 +101,38 @@ async def callback_handler(client: Client, query: CallbackQuery):
         await query.message.edit_text(HELP_TEXT, reply_markup=get_back_button())
     elif data == "btn_about":
         await query.message.edit_text(ABOUT_TEXT, reply_markup=get_back_button())
+    elif data == "btn_gen_session":
+        gen_text = (
+            "⚡ **Pyrogram v2 String Session Generator**\n\n"
+            "You can generate a session string for your Telegram account directly inside this chat or via terminal.\n\n"
+            "🔹 **In-Bot Generator (Recommended):**\n"
+            "Click **Start Generation** below to begin. The bot will ask for your phone number, send you a Telegram code, and generate your session string!\n\n"
+            "🔹 **Terminal Script:**\n"
+            "Run `python3 generate_session.py` on your computer.\n\n"
+            "👇 Click the button below to start generating right now:"
+        )
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🚀 Start In-Bot Generation", callback_data="btn_start_gen_wizard")],
+            [InlineKeyboardButton("🔙 Back to Menu", callback_data="btn_back")]
+        ])
+        await query.message.edit_text(gen_text, reply_markup=markup)
+    elif data == "btn_start_gen_wizard":
+        from plugins.login import start_interactive_login
+        await start_interactive_login(client, user_id, query.message.reply_text)
     elif data == "btn_connect":
         connect_instructions = (
             "🔑 **How to Connect Your Self ID:**\n\n"
-            "**Method 1 (Instant String Session):**\n"
+            "**Method 1 (In-Bot Session Generator):**\n"
+            "Click **⚡ Generate Session String** on the main menu or run `/login_phone`.\n\n"
+            "**Method 2 (Paste Existing String Session):**\n"
             "Send: `/login YOUR_PYROGRAM_STRING_SESSION`\n\n"
-            "**Method 2 (Interactive Phone Login):**\n"
-            "Send: `/login_phone` and follow the prompts in this chat.\n\n"
             "💡 You can generate a string session on your computer with `python3 generate_session.py`."
         )
-        await query.message.edit_text(connect_instructions, reply_markup=get_back_button())
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚡ Generate Session Now", callback_data="btn_gen_session")],
+            [InlineKeyboardButton("🔙 Back to Menu", callback_data="btn_back")]
+        ])
+        await query.message.edit_text(connect_instructions, reply_markup=markup)
     elif data == "btn_myaccount":
         user_info = await get_user(user_id)
         if user_info and user_info.get("string_session"):
@@ -123,8 +148,9 @@ async def callback_handler(client: Client, query: CallbackQuery):
             status_text = (
                 "⚠️ **No Self ID Connected!**\n\n"
                 "You haven't linked your Telegram account yet.\n"
-                "Send `/login <string_session>` or `/login_phone` to connect."
+                "Click **⚡ Generate Session String** or send `/login_phone` to connect."
             )
         await query.message.edit_text(status_text, reply_markup=get_back_button())
 
     await query.answer()
+
