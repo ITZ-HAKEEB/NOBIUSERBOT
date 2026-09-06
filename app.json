@@ -1,0 +1,44 @@
+{
+  "name": "Multi-Task-Tagger-Bot",
+  "description": "Telegram Self ID Tagger Bot built with Pyrogram MTProto",
+  "repository": "https://github.com/nishkarshk212/Multi-task-bot",
+  "keywords": ["telegram", "bot", "pyrogram", "userbot", "tagger"],
+  "env": {
+    "API_ID": {
+      "description": "Your Telegram API ID from https://my.telegram.org",
+      "required": true
+    },
+    "API_HASH": {
+      "description": "Your Telegram API HASH from https://my.telegram.org",
+      "required": true
+    },
+    "BOT_TOKEN": {
+      "description": "Your Telegram Bot Token from @BotFather",
+      "required": true
+    },
+    "OWNER_ID": {
+      "description": "Telegram numeric User ID of the bot owner",
+      "required": true
+    },
+    "DEFAULT_STRING_SESSION": {
+      "description": "Optional default Pyrogram v2 string session for global selfbot",
+      "required": false
+    },
+    "TAG_DELAY": {
+      "description": "Delay in seconds between tag messages",
+      "value": "2.5",
+      "required": false
+    },
+    "USERS_PER_TAG": {
+      "description": "Number of users tagged per message (1 for single user per message)",
+      "value": "1",
+      "required": false
+    }
+  },
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  }
+}
