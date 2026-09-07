@@ -1,9 +1,53 @@
-import aiosqlite
+import logging
 from typing import Optional, Dict, Any, List
-from config import DATABASE_PATH
+from datetime import datetime
+from config import DATABASE_PATH, MONGO_URL, DB_NAME
+
+logger = logging.getLogger(__name__)
+
+# State for MongoDB
+_mongo_client = None
+_mongo_db = None
+_is_mongo = False
+
+
+def is_mongo_active() -> bool:
+    return bool(_is_mongo and _mongo_db is not None)
+
 
 async def init_db():
-    """Initialize SQLite tables."""
+    """Initialize MongoDB Atlas or fallback to SQLite."""
+    global _mongo_client, _mongo_db, _is_mongo
+
+    if MONGO_URL and "<" not in MONGO_URL and ">" not in MONGO_URL:
+        try:
+            import motor.motor_asyncio
+            _mongo_client = motor.motor_asyncio.AsyncIOMotorClient(
+                MONGO_URL,
+                serverSelectionTimeoutMS=5000
+            )
+            _mongo_db = _mongo_client[DB_NAME]
+            # Ping to confirm connection
+            await _mongo_db.command("ping")
+            _is_mongo = True
+            logger.info("Successfully connected to MongoDB Atlas (DB: %s)", DB_NAME)
+
+            # Ensure indexes
+            await _mongo_db.users.create_index("user_id", unique=True)
+            await _mongo_db.login_states.create_index("user_id", unique=True)
+            await _mongo_db.active_tagging.create_index("chat_id", unique=True)
+            await _mongo_db.favorite_users.create_index([("owner_id", 1), ("fav_user_id", 1)], unique=True)
+            await _mongo_db.saveit_settings.create_index("user_id", unique=True)
+            return
+        except Exception as e:
+            logger.warning("MongoDB connection failed (%s), falling back to SQLite", e)
+            _is_mongo = False
+            _mongo_client = None
+            _mongo_db = None
+
+    # SQLite fallback
+    import aiosqlite
+    logger.info("Using SQLite database at %s", DATABASE_PATH)
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -58,8 +102,25 @@ async def init_db():
         await db.commit()
 
 
+# --- Users ---
 
 async def add_or_update_user(user_id: int, first_name: str, username: Optional[str]):
+    if is_mongo_active():
+        await _mongo_db.users.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "user_id": user_id,
+                    "first_name": first_name,
+                    "username": username,
+                },
+                "$setOnInsert": {"created_at": datetime.utcnow()}
+            },
+            upsert=True
+        )
+        return
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
             INSERT INTO users (user_id, first_name, username)
@@ -70,7 +131,25 @@ async def add_or_update_user(user_id: int, first_name: str, username: Optional[s
         """, (user_id, first_name, username))
         await db.commit()
 
+
 async def set_user_session(user_id: int, string_session: str, self_user_id: int, self_first_name: str, self_username: Optional[str]):
+    if is_mongo_active():
+        await _mongo_db.users.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "user_id": user_id,
+                    "string_session": string_session,
+                    "self_user_id": self_user_id,
+                    "self_first_name": self_first_name,
+                    "self_username": self_username
+                }
+            },
+            upsert=True
+        )
+        return
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
             INSERT INTO users (user_id, string_session, self_user_id, self_first_name, self_username)
@@ -83,14 +162,38 @@ async def set_user_session(user_id: int, string_session: str, self_user_id: int,
         """, (user_id, string_session, self_user_id, self_first_name, self_username))
         await db.commit()
 
+
 async def get_user(user_id: int) -> Optional[Dict[str, Any]]:
+    if is_mongo_active():
+        doc = await _mongo_db.users.find_one({"user_id": user_id})
+        if doc:
+            doc.pop("_id", None)
+        return doc
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
+
 async def remove_user_session(user_id: int):
+    if is_mongo_active():
+        await _mongo_db.users.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "string_session": None,
+                    "self_user_id": None,
+                    "self_first_name": None,
+                    "self_username": None
+                }
+            }
+        )
+        return
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
             UPDATE users SET
@@ -102,22 +205,57 @@ async def remove_user_session(user_id: int):
         """, (user_id,))
         await db.commit()
 
+
 async def get_all_users_with_sessions() -> List[Dict[str, Any]]:
+    if is_mongo_active():
+        cursor = _mongo_db.users.find({
+            "string_session": {"$exists": True, "$ne": None, "$nin": ["", None]}
+        })
+        results = []
+        async for doc in cursor:
+            doc.pop("_id", None)
+            results.append(doc)
+        return results
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM users WHERE string_session IS NOT NULL AND string_session != ''") as cursor:
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
 
+
 async def get_total_users() -> int:
+    if is_mongo_active():
+        return await _mongo_db.users.count_documents({})
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute("SELECT COUNT(*) FROM users") as cursor:
             res = await cursor.fetchone()
             return res[0] if res else 0
 
+
 # --- Login flow states ---
 
 async def save_login_state(user_id: int, phone_number: str, phone_code_hash: str, step: str, session_string: str = ""):
+    if is_mongo_active():
+        await _mongo_db.login_states.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "user_id": user_id,
+                    "phone_number": phone_number,
+                    "phone_code_hash": phone_code_hash,
+                    "step": step,
+                    "session_string": session_string
+                }
+            },
+            upsert=True
+        )
+        return
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
             INSERT INTO login_states (user_id, phone_number, phone_code_hash, step, session_string)
@@ -130,21 +268,52 @@ async def save_login_state(user_id: int, phone_number: str, phone_code_hash: str
         """, (user_id, phone_number, phone_code_hash, step, session_string))
         await db.commit()
 
+
 async def get_login_state(user_id: int) -> Optional[Dict[str, Any]]:
+    if is_mongo_active():
+        doc = await _mongo_db.login_states.find_one({"user_id": user_id})
+        if doc:
+            doc.pop("_id", None)
+        return doc
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM login_states WHERE user_id = ?", (user_id,)) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
+
 async def clear_login_state(user_id: int):
+    if is_mongo_active():
+        await _mongo_db.login_states.delete_one({"user_id": user_id})
+        return
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("DELETE FROM login_states WHERE user_id = ?", (user_id,))
         await db.commit()
 
+
 # --- Active Tagging State ---
 
 async def start_tagging_db(chat_id: int, started_by: int, tagger_user_id: int):
+    if is_mongo_active():
+        await _mongo_db.active_tagging.update_one(
+            {"chat_id": chat_id},
+            {
+                "$set": {
+                    "chat_id": chat_id,
+                    "started_by": started_by,
+                    "tagger_user_id": tagger_user_id,
+                    "is_active": 1
+                }
+            },
+            upsert=True
+        )
+        return
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
             INSERT INTO active_tagging (chat_id, started_by, tagger_user_id, is_active)
@@ -156,20 +325,53 @@ async def start_tagging_db(chat_id: int, started_by: int, tagger_user_id: int):
         """, (chat_id, started_by, tagger_user_id))
         await db.commit()
 
+
 async def is_tagging_active_db(chat_id: int) -> bool:
+    if is_mongo_active():
+        doc = await _mongo_db.active_tagging.find_one({"chat_id": chat_id})
+        return bool(doc and doc.get("is_active") == 1)
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute("SELECT is_active FROM active_tagging WHERE chat_id = ?", (chat_id,)) as cursor:
             row = await cursor.fetchone()
             return bool(row and row[0] == 1)
 
+
 async def stop_tagging_db(chat_id: int):
+    if is_mongo_active():
+        await _mongo_db.active_tagging.update_one(
+            {"chat_id": chat_id},
+            {"$set": {"is_active": 0}}
+        )
+        return
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("UPDATE active_tagging SET is_active = 0 WHERE chat_id = ?", (chat_id,))
         await db.commit()
 
+
 # --- Favorite Users ---
 
 async def add_favorite_user(owner_id: int, fav_user_id: int, fav_first_name: str, fav_username: Optional[str]):
+    if is_mongo_active():
+        await _mongo_db.favorite_users.update_one(
+            {"owner_id": owner_id, "fav_user_id": fav_user_id},
+            {
+                "$set": {
+                    "owner_id": owner_id,
+                    "fav_user_id": fav_user_id,
+                    "fav_first_name": fav_first_name,
+                    "fav_username": fav_username,
+                    "created_at": datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
+        return
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
             INSERT INTO favorite_users (owner_id, fav_user_id, fav_first_name, fav_username)
@@ -180,7 +382,13 @@ async def add_favorite_user(owner_id: int, fav_user_id: int, fav_first_name: str
         """, (owner_id, fav_user_id, fav_first_name, fav_username))
         await db.commit()
 
+
 async def remove_favorite_user(owner_id: int, fav_user_id: int) -> bool:
+    if is_mongo_active():
+        res = await _mongo_db.favorite_users.delete_one({"owner_id": owner_id, "fav_user_id": fav_user_id})
+        return res.deleted_count > 0
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
             "DELETE FROM favorite_users WHERE owner_id = ? AND fav_user_id = ?",
@@ -189,7 +397,17 @@ async def remove_favorite_user(owner_id: int, fav_user_id: int) -> bool:
         await db.commit()
         return cursor.rowcount > 0
 
+
 async def get_favorite_users(owner_id: int) -> List[Dict[str, Any]]:
+    if is_mongo_active():
+        cursor = _mongo_db.favorite_users.find({"owner_id": owner_id}).sort("created_at", 1)
+        favs = []
+        async for doc in cursor:
+            doc.pop("_id", None)
+            favs.append(doc)
+        return favs
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -199,23 +417,45 @@ async def get_favorite_users(owner_id: int) -> List[Dict[str, Any]]:
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
 
+
 async def clear_favorite_users(owner_id: int):
+    if is_mongo_active():
+        await _mongo_db.favorite_users.delete_many({"owner_id": owner_id})
+        return
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("DELETE FROM favorite_users WHERE owner_id = ?", (owner_id,))
         await db.commit()
+
 
 # --- Saveit Settings ---
 
 async def get_saveit_setting(user_id: int) -> bool:
     """Check if auto-save timed media is enabled (default True)."""
+    if is_mongo_active():
+        doc = await _mongo_db.saveit_settings.find_one({"user_id": user_id})
+        return bool(doc.get("auto_save_timed", 1)) if doc else True
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         async with db.execute("SELECT auto_save_timed FROM saveit_settings WHERE user_id = ?", (user_id,)) as cursor:
             row = await cursor.fetchone()
             return bool(row[0]) if row else True
 
+
 async def set_saveit_setting(user_id: int, auto_save: bool):
     """Set auto-save timed media enabled/disabled."""
     val = 1 if auto_save else 0
+    if is_mongo_active():
+        await _mongo_db.saveit_settings.update_one(
+            {"user_id": user_id},
+            {"$set": {"user_id": user_id, "auto_save_timed": val}},
+            upsert=True
+        )
+        return
+
+    import aiosqlite
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
             INSERT INTO saveit_settings (user_id, auto_save_timed)
@@ -223,5 +463,3 @@ async def set_saveit_setting(user_id: int, auto_save: bool):
             ON CONFLICT(user_id) DO UPDATE SET auto_save_timed = excluded.auto_save_timed
         """, (user_id, val))
         await db.commit()
-
-
