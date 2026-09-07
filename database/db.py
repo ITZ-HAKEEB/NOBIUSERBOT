@@ -48,7 +48,15 @@ async def init_db():
             )
         """)
 
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS saveit_settings (
+                user_id INTEGER PRIMARY KEY,
+                auto_save_timed INTEGER DEFAULT 1
+            )
+        """)
+
         await db.commit()
+
 
 
 async def add_or_update_user(user_id: int, first_name: str, username: Optional[str]):
@@ -195,4 +203,25 @@ async def clear_favorite_users(owner_id: int):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("DELETE FROM favorite_users WHERE owner_id = ?", (owner_id,))
         await db.commit()
+
+# --- Saveit Settings ---
+
+async def get_saveit_setting(user_id: int) -> bool:
+    """Check if auto-save timed media is enabled (default True)."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute("SELECT auto_save_timed FROM saveit_settings WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return bool(row[0]) if row else True
+
+async def set_saveit_setting(user_id: int, auto_save: bool):
+    """Set auto-save timed media enabled/disabled."""
+    val = 1 if auto_save else 0
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("""
+            INSERT INTO saveit_settings (user_id, auto_save_timed)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET auto_save_timed = excluded.auto_save_timed
+        """, (user_id, val))
+        await db.commit()
+
 

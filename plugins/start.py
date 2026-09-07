@@ -35,11 +35,17 @@ HELP_TEXT = """
 • **`/favs`** `— List all saved favorite users`
 • **`/clearfavs`** `— Clear all favorite users`
 
+💾 **`SaveIt Media Vault (Timed & Restricted Saver):`**
+• **`.saveit`** `(or /saveit) — Reply to any media or view-once to save to Saved Messages`
+• **`/autosave`** `— Toggle auto-saving incoming disappearing photos/videos`
+• **`/autosave on|off`** `— Enable or disable auto-saving timed media`
+
 ⚡ **`Direct Account Prefixes:`**
 • **`.tag <text>`**
 • **`.etag <text>`**
 • **`.ftag <text>`**
 • **`.admintag <text>`**
+• **`.saveit`**
 • **`.stop`**
 
 🔒 **`Private Chat Setup:`**
@@ -51,10 +57,11 @@ HELP_TEXT = """
 """
 
 ABOUT_TEXT = """
-🤖 **`[ Aʙᴏᴜᴛ Sᴇʟғ ID Tᴀɢɢᴇʀ Bᴏᴛ ]`**
+🤖 **`[ Aʙᴏᴜᴛ Sᴇʟғ ID Tᴀɢɢᴇʀ & SᴀᴠᴇIᴛ Bᴏᴛ ]`**
 
 • **`Engine:`** `Pyrogram v2 MTProto Client`
 • **`Architecture:`** `Asyncio Multi-Client Manager`
+• **`Vault:`** `SaveIt Auto-Saver for Timed & View-Once Media`
 • **`Database:`** `Async SQLite Storage`
 • **`Pacing:`** `2.5s Anti-Flood Auto Backoff`
 """
@@ -63,6 +70,9 @@ def get_start_buttons():
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(f"⚡ {to_mono('Generate Session String')}", callback_data="btn_gen_session")
+        ],
+        [
+            InlineKeyboardButton(f"💾 {to_mono('SaveIt Media Vault')}", callback_data="btn_saveit")
         ],
         [
             InlineKeyboardButton(f"⭐ {to_mono('Favorite Users')}", callback_data="btn_favs"),
@@ -76,6 +86,7 @@ def get_start_buttons():
             InlineKeyboardButton(f"👤 {to_mono('My Account')}", callback_data="btn_myaccount")
         ]
     ])
+
 
 
 def get_back_button():
@@ -168,7 +179,53 @@ async def callback_handler(client: Client, query: CallbackQuery):
             fav_text = "\n".join(lines)
 
         await query.message.edit_text(fav_text, reply_markup=get_back_button(), disable_web_page_preview=True)
+    elif data == "btn_saveit":
+        from database.db import get_saveit_setting
+        is_on = await get_saveit_setting(user_id)
+        state_str = "🟢 **`ENABLED`**" if is_on else "🔴 **`DISABLED`**"
+        btn_action = f"🔴 {to_mono('Disable Auto-Saver')}" if is_on else f"🟢 {to_mono('Enable Auto-Saver')}"
+
+        saveit_text = (
+            "💾 **`[ SaveIt Media Vault ]`**\n\n"
+            f"• **`Auto-Save Disappearing Media:`** {state_str}\n\n"
+            "🔥 **`What SaveIt Does:`**\n"
+            "• **`Auto-captures incoming view-once / disappearing photos & videos`**\n"
+            "• **`Saves restricted media (bypasses forwarding blocks)`**\n"
+            "• **`Sends uncompressed original files straight to your Saved Messages`**\n\n"
+            "💡 **`Manual Usage:`**\n"
+            "**`Reply to ANY photo, video or voice note with .saveit (or /saveit)!`**"
+        )
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(btn_action, callback_data="btn_toggle_autosave")],
+            [InlineKeyboardButton(f"🔙 {to_mono('Back to Menu')}", callback_data="btn_back")]
+        ])
+        await query.message.edit_text(saveit_text, reply_markup=markup)
+    elif data == "btn_toggle_autosave":
+        from database.db import get_saveit_setting, set_saveit_setting
+        is_on = await get_saveit_setting(user_id)
+        new_state = not is_on
+        await set_saveit_setting(user_id, new_state)
+
+        state_str = "🟢 **`ENABLED`**" if new_state else "🔴 **`DISABLED`**"
+        btn_action = f"🔴 {to_mono('Disable Auto-Saver')}" if new_state else f"🟢 {to_mono('Enable Auto-Saver')}"
+
+        saveit_text = (
+            "💾 **`[ SaveIt Media Vault ]`**\n\n"
+            f"• **`Auto-Save Disappearing Media:`** {state_str}\n\n"
+            "🔥 **`What SaveIt Does:`**\n"
+            "• **`Auto-captures incoming view-once / disappearing photos & videos`**\n"
+            "• **`Saves restricted media (bypasses forwarding blocks)`**\n"
+            "• **`Sends uncompressed original files straight to your Saved Messages`**\n\n"
+            "💡 **`Manual Usage:`**\n"
+            "**`Reply to ANY photo, video or voice note with .saveit (or /saveit)!`**"
+        )
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(btn_action, callback_data="btn_toggle_autosave")],
+            [InlineKeyboardButton(f"🔙 {to_mono('Back to Menu')}", callback_data="btn_back")]
+        ])
+        await query.message.edit_text(saveit_text, reply_markup=markup)
     elif data == "btn_myaccount":
+
         user_info = await get_user(user_id)
         if user_info and user_info.get("string_session"):
             status_text = (

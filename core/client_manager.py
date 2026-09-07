@@ -175,12 +175,42 @@ class ClientManager:
 
 
         @client.on_message(filters.me & filters.command(["stop", "cancel"], prefixes=[".", "!", "/"]))
-
         async def _self_stop_handler(c: Client, m: Message):
             stopped = await tagger_engine.stop_tagging(m.chat.id)
             if stopped:
                 await m.reply_text("🛑 **Tagging stopped successfully!**")
             else:
                 await m.reply_text("ℹ️ No active tagging process found in this group.")
+
+        # --- SaveIt Media Handlers (Timed Media Auto-Saver & .saveit) ---
+        from core.saveit import is_timed_media, has_media, save_and_forward_media
+        from database.db import get_saveit_setting
+
+        @client.on_message(filters.private & ~filters.me)
+        async def _auto_save_timed_handler(c: Client, m: Message):
+            """Automatically intercepts disappearing/view-once photos and videos."""
+            if is_timed_media(m):
+                user_id = c.me.id
+                if await get_saveit_setting(user_id):
+                    logger.info(f"Auto-capturing timed media for user {user_id} from {m.chat.id}")
+                    await save_and_forward_media(client=c, message=m, is_auto=True)
+
+        @client.on_message(filters.me & filters.command(["save", "saveit"], prefixes=[".", "!", "/"]))
+        async def _self_saveit_handler(c: Client, m: Message):
+            """Manual saver: reply to any media with .saveit to save to Saved Messages."""
+            if not m.reply_to_message:
+                return await m.reply_text("⚠️ **`Reply to any photo, video or media with .saveit to save it to your Saved Messages!`**")
+
+            target_msg = m.reply_to_message
+            if not has_media(target_msg):
+                return await m.reply_text("❌ **`No media found in replied message!`**")
+
+            status = await m.reply_text("⏳ **`Saving media to Saved Messages...`**")
+            success = await save_and_forward_media(client=c, message=target_msg, is_auto=False)
+            if success:
+                await status.edit_text("✅ **`Media successfully saved to your Saved Messages!`**")
+            else:
+                await status.edit_text("❌ **`Failed to download or save media.`**")
+
 
 client_manager = ClientManager()
