@@ -76,7 +76,7 @@ async def save_and_forward_media(client: Client, message: Message, is_auto: bool
     file_path = None
     try:
         logger.info(f"Downloading media from chat {message.chat.id}, msg {message.id}...")
-        file_path = await client.download_media(message, file=str(DOWNLOADS_DIR) + "/")
+        file_path = await client.download_media(message, file_name=str(DOWNLOADS_DIR) + "/")
         if not file_path or not os.path.exists(file_path):
             logger.error(f"Download failed for message {message.id}")
             async with _save_lock:
