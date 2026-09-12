@@ -2,9 +2,14 @@ import asyncio
 import logging
 import sys
 from pyrogram import Client, idle
+import pyrogram.utils
 import config
 from database.db import init_db
 from core.client_manager import client_manager
+
+# Fix 64-bit Telegram channel/supergroup ID resolution for Pyrogram
+pyrogram.utils.MIN_CHANNEL_ID = -100999999999999
+pyrogram.utils.MAX_CHANNEL_ID = -1000000000000
 
 logging.basicConfig(
     level=logging.INFO,
@@ -12,6 +17,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 logger = logging.getLogger("TaggerBot")
+
 
 async def main():
     logger.info("Starting Telegram Self ID Tagger Bot...")
