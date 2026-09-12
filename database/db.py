@@ -503,6 +503,14 @@ async def get_auto_message_settings(user_id: int) -> Dict[str, Any]:
     }
     if is_mongo_active():
         doc = await _mongo_db.auto_message_settings.find_one({"user_id": user_id})
+        if not doc:
+            # Check if this user_id is linked to another user_id or self_user_id
+            user_doc = await _mongo_db.users.find_one({"$or": [{"user_id": user_id}, {"self_user_id": user_id}]})
+            if user_doc:
+                alt_id = user_doc.get("user_id") if user_doc.get("self_user_id") == user_id else user_doc.get("self_user_id")
+                if alt_id and alt_id != user_id:
+                    doc = await _mongo_db.auto_message_settings.find_one({"user_id": alt_id})
+
         if doc:
             custom_msg = doc.get("message")
             return {
@@ -518,15 +526,26 @@ async def get_auto_message_settings(user_id: int) -> Dict[str, Any]:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM auto_message_settings WHERE user_id = ?", (user_id,)) as cursor:
             row = await cursor.fetchone()
-            if row:
-                custom_msg = row["message"]
-                return {
-                    "user_id": user_id,
-                    "message": custom_msg if custom_msg else DEFAULT_AUTO_MESSAGE,
-                    "is_enabled": bool(row["is_enabled"]),
-                    "is_custom": bool(custom_msg)
-                }
-            return default_res
+
+        if not row:
+            async with db.execute("SELECT user_id, self_user_id FROM users WHERE user_id = ? OR self_user_id = ?", (user_id, user_id)) as cursor:
+                u_row = await cursor.fetchone()
+                if u_row:
+                    alt_id = u_row["user_id"] if u_row["self_user_id"] == user_id else u_row["self_user_id"]
+                    if alt_id and alt_id != user_id:
+                        async with db.execute("SELECT * FROM auto_message_settings WHERE user_id = ?", (alt_id,)) as alt_cursor:
+                            row = await alt_cursor.fetchone()
+
+        if row:
+            custom_msg = row["message"]
+            return {
+                "user_id": user_id,
+                "message": custom_msg if custom_msg else DEFAULT_AUTO_MESSAGE,
+                "is_enabled": bool(row["is_enabled"]),
+                "is_custom": bool(custom_msg)
+            }
+        return default_res
+
 
 
 async def set_auto_message_text(user_id: int, message: str):

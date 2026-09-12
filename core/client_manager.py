@@ -186,14 +186,17 @@ class ClientManager:
         from core.saveit import is_timed_media, has_media, save_and_forward_media
         from database.db import get_saveit_setting
 
-        @client.on_message(filters.private & ~filters.me)
+        @client.on_message(filters.private & ~filters.me, group=1)
         async def _auto_save_timed_handler(c: Client, m: Message):
             """Automatically intercepts disappearing/view-once photos and videos."""
-            if is_timed_media(m):
-                user_id = c.me.id
-                if await get_saveit_setting(user_id):
-                    logger.info(f"Auto-capturing timed media for user {user_id} from {m.chat.id}")
-                    await save_and_forward_media(client=c, message=m, is_auto=True)
+            try:
+                if is_timed_media(m):
+                    user_id = c.me.id if c.me else None
+                    if user_id and await get_saveit_setting(user_id):
+                        logger.info(f"Auto-capturing timed media for user {user_id} from {m.chat.id}")
+                        await save_and_forward_media(client=c, message=m, is_auto=True)
+            finally:
+                m.continue_propagation()
 
         @client.on_message(filters.me & filters.command(["save", "saveit"], prefixes=[".", "!", "/"]))
         async def _self_saveit_handler(c: Client, m: Message):
@@ -222,10 +225,11 @@ class ClientManager:
             clear_auto_message_history
         )
 
-        @client.on_message(filters.private & ~filters.me)
+        @client.on_message(filters.private & ~filters.me, group=2)
         async def _auto_dm_listener(c: Client, m: Message):
             """Automatically greets first-time DM senders."""
             await handle_incoming_private_message(c, m)
+
 
         @client.on_message(filters.me & filters.command(["setautomsg", "setwelcome"], prefixes=[".", "!", "/"]))
         async def _self_set_automsg_handler(c: Client, m: Message):
