@@ -38,6 +38,8 @@ async def init_db():
             await _mongo_db.active_tagging.create_index("chat_id", unique=True)
             await _mongo_db.favorite_users.create_index([("owner_id", 1), ("fav_user_id", 1)], unique=True)
             await _mongo_db.saveit_settings.create_index("user_id", unique=True)
+            await _mongo_db.auto_message_settings.create_index("user_id", unique=True)
+            await _mongo_db.auto_message_history.create_index([("assistant_id", 1), ("peer_id", 1)], unique=True)
             return
         except Exception as e:
             logger.warning("MongoDB connection failed (%s), falling back to SQLite", e)
@@ -96,6 +98,23 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS saveit_settings (
                 user_id INTEGER PRIMARY KEY,
                 auto_save_timed INTEGER DEFAULT 1
+            )
+        """)
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS auto_message_settings (
+                user_id INTEGER PRIMARY KEY,
+                message TEXT,
+                is_enabled INTEGER DEFAULT 1
+            )
+        """)
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS auto_message_history (
+                assistant_id INTEGER,
+                peer_id INTEGER,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (assistant_id, peer_id)
             )
         """)
 
@@ -463,3 +482,165 @@ async def set_saveit_setting(user_id: int, auto_save: bool):
             ON CONFLICT(user_id) DO UPDATE SET auto_save_timed = excluded.auto_save_timed
         """, (user_id, val))
         await db.commit()
+
+
+# --- Auto Message Settings & History ---
+
+DEFAULT_AUTO_MESSAGE = (
+    "Hello {name}! 👋\n\n"
+    "Thanks for reaching out! I received your message and will get back to you as soon as possible.\n\n"
+    "*(Automated Response)*"
+)
+
+
+async def get_auto_message_settings(user_id: int) -> Dict[str, Any]:
+    """Get auto-responder settings for a user (message and enabled status)."""
+    default_res = {
+        "user_id": user_id,
+        "message": DEFAULT_AUTO_MESSAGE,
+        "is_enabled": True,
+        "is_custom": False
+    }
+    if is_mongo_active():
+        doc = await _mongo_db.auto_message_settings.find_one({"user_id": user_id})
+        if doc:
+            custom_msg = doc.get("message")
+            return {
+                "user_id": user_id,
+                "message": custom_msg if custom_msg else DEFAULT_AUTO_MESSAGE,
+                "is_enabled": bool(doc.get("is_enabled", 1)),
+                "is_custom": bool(custom_msg)
+            }
+        return default_res
+
+    import aiosqlite
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM auto_message_settings WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                custom_msg = row["message"]
+                return {
+                    "user_id": user_id,
+                    "message": custom_msg if custom_msg else DEFAULT_AUTO_MESSAGE,
+                    "is_enabled": bool(row["is_enabled"]),
+                    "is_custom": bool(custom_msg)
+                }
+            return default_res
+
+
+async def set_auto_message_text(user_id: int, message: str):
+    """Set custom auto-responder message for user."""
+    if is_mongo_active():
+        await _mongo_db.auto_message_settings.update_one(
+            {"user_id": user_id},
+            {"$set": {"user_id": user_id, "message": message}},
+            upsert=True
+        )
+        return
+
+    import aiosqlite
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("""
+            INSERT INTO auto_message_settings (user_id, message)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET message = excluded.message
+        """, (user_id, message))
+        await db.commit()
+
+
+async def reset_auto_message_text(user_id: int):
+    """Reset auto-responder message to default."""
+    if is_mongo_active():
+        await _mongo_db.auto_message_settings.update_one(
+            {"user_id": user_id},
+            {"$set": {"message": None}}
+        )
+        return
+
+    import aiosqlite
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("""
+            UPDATE auto_message_settings SET message = NULL WHERE user_id = ?
+        """, (user_id,))
+        await db.commit()
+
+
+async def set_auto_message_enabled(user_id: int, is_enabled: bool):
+    """Enable or disable auto-responder."""
+    val = 1 if is_enabled else 0
+    if is_mongo_active():
+        await _mongo_db.auto_message_settings.update_one(
+            {"user_id": user_id},
+            {"$set": {"user_id": user_id, "is_enabled": val}},
+            upsert=True
+        )
+        return
+
+    import aiosqlite
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("""
+            INSERT INTO auto_message_settings (user_id, is_enabled)
+            VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET is_enabled = excluded.is_enabled
+        """, (user_id, val))
+        await db.commit()
+
+
+async def has_received_auto_message(assistant_id: int, peer_id: int) -> bool:
+    """Check if this peer has already received an auto-message from this assistant."""
+    if is_mongo_active():
+        doc = await _mongo_db.auto_message_history.find_one({
+            "assistant_id": assistant_id,
+            "peer_id": peer_id
+        })
+        return doc is not None
+
+    import aiosqlite
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute(
+            "SELECT 1 FROM auto_message_history WHERE assistant_id = ? AND peer_id = ?",
+            (assistant_id, peer_id)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row is not None
+
+
+async def mark_auto_message_sent(assistant_id: int, peer_id: int):
+    """Record that an auto-message has been sent to this peer by this assistant."""
+    if is_mongo_active():
+        await _mongo_db.auto_message_history.update_one(
+            {"assistant_id": assistant_id, "peer_id": peer_id},
+            {
+                "$set": {
+                    "assistant_id": assistant_id,
+                    "peer_id": peer_id,
+                    "sent_at": datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
+        return
+
+    import aiosqlite
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("""
+            INSERT INTO auto_message_history (assistant_id, peer_id)
+            VALUES (?, ?)
+            ON CONFLICT(assistant_id, peer_id) DO UPDATE SET sent_at = CURRENT_TIMESTAMP
+        """, (assistant_id, peer_id))
+        await db.commit()
+
+
+async def clear_auto_message_history(assistant_id: int) -> int:
+    """Clear the sent history for this assistant so contacts can be greeted again."""
+    if is_mongo_active():
+        res = await _mongo_db.auto_message_history.delete_many({"assistant_id": assistant_id})
+        return res.deleted_count
+
+    import aiosqlite
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute("DELETE FROM auto_message_history WHERE assistant_id = ?", (assistant_id,))
+        await db.commit()
+        return cursor.rowcount
+

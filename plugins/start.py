@@ -11,7 +11,9 @@ START_TEXT = """
 🔥 **`[ Fᴇᴀᴛᴜʀᴇs ]`**
 • **`Tag all members without username restrictions`**
 • **`Smart batches with anti-floodwait safety`**
-• **`Direct selfbot prefixes (.tag, .etag, .stop)`**
+• **`Auto DM Welcome responder for first-time private messages`**
+• **`Direct selfbot prefixes (.tag, .etag, .automsg, .stop)`**
+• **`SaveIt timed/disappearing media auto-saver`**
 • **`Instant stop and cancellation controls`**
 
 👇 **`Choose an option below to proceed:`**
@@ -26,6 +28,13 @@ HELP_TEXT = """
 • **`/etag <text>`** `— Tag with randomized emojis`
 • **`/admintag <text>`** `— Mention group admins only`
 • **`/stop`** `— Instantly cancel active tagging`
+
+🤖 **`Assistant Auto DM Responder:`**
+• **`/setautomsg <text>`** `— Set greeting message for first-time PM senders`
+• **`/automsg`** `— View status & auto-message preview`
+• **`/automsg on|off`** `— Enable or disable auto DM responder`
+• **`/resetautomsg`** `— Reset auto-message to default template`
+• **`/cleargreeted`** `— Clear greeted history to re-greet contacts`
 
 ⭐ **`Favorite Users & Fast Tag:`**
 • **`/ftag <text>`** `— Fast tag only your favorite users`
@@ -45,6 +54,10 @@ HELP_TEXT = """
 • **`.etag <text>`**
 • **`.ftag <text>`**
 • **`.admintag <text>`**
+• **`.setautomsg <text>`**
+• **`.automsg`**
+• **`.resetautomsg`**
+• **`.cleargreeted`**
 • **`.saveit`**
 • **`.stop`**
 
@@ -61,6 +74,7 @@ ABOUT_TEXT = """
 
 • **`Engine:`** `Pyrogram v2 MTProto Client`
 • **`Architecture:`** `Asyncio Multi-Client Manager`
+• **`Auto Responder:`** `First-Time DM Welcome Responder`
 • **`Vault:`** `SaveIt Auto-Saver for Timed & View-Once Media`
 • **`Database:`** `Async SQLite Storage`
 • **`Pacing:`** `2.5s Anti-Flood Auto Backoff`
@@ -72,7 +86,8 @@ def get_start_buttons():
             InlineKeyboardButton(f"⚡ {to_mono('Generate Session String')}", callback_data="btn_gen_session")
         ],
         [
-            InlineKeyboardButton(f"💾 {to_mono('SaveIt Media Vault')}", callback_data="btn_saveit")
+            InlineKeyboardButton(f"💾 {to_mono('SaveIt Media Vault')}", callback_data="btn_saveit"),
+            InlineKeyboardButton(f"🤖 {to_mono('Auto DM Responder')}", callback_data="btn_automsg")
         ],
         [
             InlineKeyboardButton(f"⭐ {to_mono('Favorite Users')}", callback_data="btn_favs"),
@@ -224,6 +239,94 @@ async def callback_handler(client: Client, query: CallbackQuery):
             [InlineKeyboardButton(f"🔙 {to_mono('Back to Menu')}", callback_data="btn_back")]
         ])
         await query.message.edit_text(saveit_text, reply_markup=markup)
+    elif data == "btn_automsg":
+        from plugins.automsg import get_effective_assistant_id
+        from database.db import get_auto_message_settings
+        assistant_id = await get_effective_assistant_id(user_id)
+        settings = await get_auto_message_settings(assistant_id)
+
+        is_on = settings["is_enabled"]
+        state_str = "🟢 **`ENABLED`**" if is_on else "🔴 **`DISABLED`**"
+        type_str = "Custom Message" if settings.get("is_custom") else "Default Template"
+        btn_action = f"🔴 {to_mono('Disable Auto DM')}" if is_on else f"🟢 {to_mono('Enable Auto DM')}"
+
+        automsg_text = (
+            "🤖 **`[ Assistant Auto DM Responder ]`**\n\n"
+            f"• **`Status:`** {state_str}\n"
+            f"• **`Template Type:`** `{type_str}`\n\n"
+            f"📝 **`Current Auto Message:`**\n{settings['message']}\n\n"
+            "💡 **`How it works:`**\n"
+            "• **`Sent automatically only the first time someone DMs your assistant in private.`**\n"
+            "• **`Customize via:`** `/setautomsg <text>` or `.setautomsg <text>`\n"
+            "• **`Reset message:`** `/resetautomsg`\n"
+            "• **`Clear history:`** `/cleargreeted`"
+        )
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(btn_action, callback_data="btn_toggle_automsg")],
+            [InlineKeyboardButton(f"🔄 {to_mono('Reset to Default')}", callback_data="btn_reset_automsg")],
+            [InlineKeyboardButton(f"🔙 {to_mono('Back to Menu')}", callback_data="btn_back")]
+        ])
+        await query.message.edit_text(automsg_text, reply_markup=markup)
+    elif data == "btn_toggle_automsg":
+        from plugins.automsg import get_effective_assistant_id
+        from database.db import get_auto_message_settings, set_auto_message_enabled
+        assistant_id = await get_effective_assistant_id(user_id)
+        settings = await get_auto_message_settings(assistant_id)
+        new_state = not settings["is_enabled"]
+        await set_auto_message_enabled(assistant_id, new_state)
+        if assistant_id != user_id:
+            await set_auto_message_enabled(user_id, new_state)
+
+        state_str = "🟢 **`ENABLED`**" if new_state else "🔴 **`DISABLED`**"
+        type_str = "Custom Message" if settings.get("is_custom") else "Default Template"
+        btn_action = f"🔴 {to_mono('Disable Auto DM')}" if new_state else f"🟢 {to_mono('Enable Auto DM')}"
+
+        automsg_text = (
+            "🤖 **`[ Assistant Auto DM Responder ]`**\n\n"
+            f"• **`Status:`** {state_str}\n"
+            f"• **`Template Type:`** `{type_str}`\n\n"
+            f"📝 **`Current Auto Message:`**\n{settings['message']}\n\n"
+            "💡 **`How it works:`**\n"
+            "• **`Sent automatically only the first time someone DMs your assistant in private.`**\n"
+            "• **`Customize via:`** `/setautomsg <text>` or `.setautomsg <text>`\n"
+            "• **`Reset message:`** `/resetautomsg`\n"
+            "• **`Clear history:`** `/cleargreeted`"
+        )
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(btn_action, callback_data="btn_toggle_automsg")],
+            [InlineKeyboardButton(f"🔄 {to_mono('Reset to Default')}", callback_data="btn_reset_automsg")],
+            [InlineKeyboardButton(f"🔙 {to_mono('Back to Menu')}", callback_data="btn_back")]
+        ])
+        await query.message.edit_text(automsg_text, reply_markup=markup)
+    elif data == "btn_reset_automsg":
+        from plugins.automsg import get_effective_assistant_id
+        from database.db import get_auto_message_settings, reset_auto_message_text
+        assistant_id = await get_effective_assistant_id(user_id)
+        await reset_auto_message_text(assistant_id)
+        if assistant_id != user_id:
+            await reset_auto_message_text(user_id)
+        settings = await get_auto_message_settings(assistant_id)
+
+        state_str = "🟢 **`ENABLED`**" if settings["is_enabled"] else "🔴 **`DISABLED`**"
+        btn_action = f"🔴 {to_mono('Disable Auto DM')}" if settings["is_enabled"] else f"🟢 {to_mono('Enable Auto DM')}"
+
+        automsg_text = (
+            "🤖 **`[ Assistant Auto DM Responder ]`**\n\n"
+            f"• **`Status:`** {state_str}\n"
+            f"• **`Template Type:`** `Default Template`\n\n"
+            f"📝 **`Current Auto Message:`**\n{settings['message']}\n\n"
+            "💡 **`How it works:`**\n"
+            "• **`Sent automatically only the first time someone DMs your assistant in private.`**\n"
+            "• **`Customize via:`** `/setautomsg <text>` or `.setautomsg <text>`\n"
+            "• **`Reset message:`** `/resetautomsg`\n"
+            "• **`Clear history:`** `/cleargreeted`"
+        )
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton(btn_action, callback_data="btn_toggle_automsg")],
+            [InlineKeyboardButton(f"🔄 {to_mono('Reset to Default')}", callback_data="btn_reset_automsg")],
+            [InlineKeyboardButton(f"🔙 {to_mono('Back to Menu')}", callback_data="btn_back")]
+        ])
+        await query.message.edit_text(automsg_text, reply_markup=markup)
     elif data == "btn_myaccount":
 
         user_info = await get_user(user_id)
@@ -245,4 +348,5 @@ async def callback_handler(client: Client, query: CallbackQuery):
         await query.message.edit_text(status_text, reply_markup=get_back_button())
 
     await query.answer()
+
 

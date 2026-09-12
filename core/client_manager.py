@@ -212,5 +212,100 @@ class ClientManager:
             else:
                 await status.edit_text("❌ **`Failed to download or save media.`**")
 
+        # --- Auto DM Responder Handlers ---
+        from core.automsg import handle_incoming_private_message
+        from database.db import (
+            get_auto_message_settings,
+            set_auto_message_text,
+            set_auto_message_enabled,
+            reset_auto_message_text,
+            clear_auto_message_history
+        )
+
+        @client.on_message(filters.private & ~filters.me)
+        async def _auto_dm_listener(c: Client, m: Message):
+            """Automatically greets first-time DM senders."""
+            await handle_incoming_private_message(c, m)
+
+        @client.on_message(filters.me & filters.command(["setautomsg", "setwelcome"], prefixes=[".", "!", "/"]))
+        async def _self_set_automsg_handler(c: Client, m: Message):
+            """Direct self command to set auto-responder message."""
+            new_text = ""
+            if len(m.text.split(None, 1)) > 1:
+                new_text = m.text.split(None, 1)[1].strip()
+            elif m.reply_to_message and m.reply_to_message.text:
+                new_text = m.reply_to_message.text.strip()
+
+            if not new_text:
+                return await m.reply_text(
+                    "⚠️ **`[ Usage: .setautomsg <text> ]`**\n\n"
+                    "• **`Example:`** `.setautomsg Hey {name}! Thanks for messaging me. I will reply soon!`\n"
+                    "• **`Or reply to any text message with .setautomsg`**\n\n"
+                    "📌 **`Supported Placeholders:`**\n"
+                    "• `{name}` — First name\n"
+                    "• `{username}` — @username\n"
+                    "• `{mention}` — Clickable mention\n"
+                    "• `{id}` — User ID\n"
+                    "• `{my_name}` — Your name"
+                )
+
+            user_id = c.me.id
+            await set_auto_message_text(user_id, new_text)
+            await m.reply_text(
+                "✅ **`[ Auto DM Message Updated! ]`**\n\n"
+                f"📝 **`New Message:`**\n{new_text}\n\n"
+                "⚡ **`This message will now be sent to anyone who DMs your assistant for the first time.`**"
+            )
+
+        @client.on_message(filters.me & filters.command(["automsg", "getautomsg"], prefixes=[".", "!", "/"]))
+        async def _self_automsg_info_handler(c: Client, m: Message):
+            """View status or toggle/reset auto-responder."""
+            user_id = c.me.id
+            parts = m.text.split()
+            if len(parts) > 1:
+                subcmd = parts[1].lower()
+                if subcmd in ["on", "enable", "1"]:
+                    await set_auto_message_enabled(user_id, True)
+                    return await m.reply_text("🟢 **`Auto DM Responder is now ENABLED!`**")
+                elif subcmd in ["off", "disable", "0"]:
+                    await set_auto_message_enabled(user_id, False)
+                    return await m.reply_text("🔴 **`Auto DM Responder is now DISABLED!`**")
+                elif subcmd in ["reset"]:
+                    await reset_auto_message_text(user_id)
+                    return await m.reply_text("🔄 **`Auto DM message reset to default template!`**")
+                elif subcmd in ["clear", "clearhistory", "cleargreeted"]:
+                    count = await clear_auto_message_history(user_id)
+                    return await m.reply_text(f"🧹 **`Cleared {count} greeted contacts from history! They will be greeted again on their next message.`**")
+
+            settings = await get_auto_message_settings(user_id)
+            state_str = "🟢 **`ENABLED`**" if settings["is_enabled"] else "🔴 **`DISABLED`**"
+            type_str = "Custom" if settings.get("is_custom") else "Default"
+
+            msg_preview = settings["message"]
+            await m.reply_text(
+                "🤖 **`[ Assistant Auto DM Settings ]`**\n\n"
+                f"• **`Status:`** {state_str}\n"
+                f"• **`Template Type:`** `{type_str}`\n\n"
+                f"📝 **`Current Message:`**\n{msg_preview}\n\n"
+                "⚙️ **`Controls:`**\n"
+                "• `.automsg on|off` — Enable / Disable\n"
+                "• `.setautomsg <text>` — Change message\n"
+                "• `.resetautomsg` — Reset to default\n"
+                "• `.cleargreeted` — Reset greeted contacts"
+            )
+
+        @client.on_message(filters.me & filters.command(["resetautomsg"], prefixes=[".", "!", "/"]))
+        async def _self_reset_automsg_handler(c: Client, m: Message):
+            user_id = c.me.id
+            await reset_auto_message_text(user_id)
+            await m.reply_text("🔄 **`Auto DM message has been reset to the default template!`**")
+
+        @client.on_message(filters.me & filters.command(["cleargreeted"], prefixes=[".", "!", "/"]))
+        async def _self_clear_greeted_handler(c: Client, m: Message):
+            user_id = c.me.id
+            count = await clear_auto_message_history(user_id)
+            await m.reply_text(f"🧹 **`Cleared {count} contacts from greeted history!`**")
+
 
 client_manager = ClientManager()
+

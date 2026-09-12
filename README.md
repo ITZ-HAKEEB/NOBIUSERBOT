@@ -12,6 +12,12 @@ Unlike standard Telegram Bot API bots that are restricted from viewing member li
   - Connect your personal Telegram user account via Pyrogram String Session (`/login <string>`).
   - Interactive phone number + OTP login wizard directly inside the bot's private chat (`/login_phone`).
   - Safe local SQLite storage with session revocation (`/logout`, `/myaccount`).
+- 🤖 **Assistant Auto DM Responder**:
+  - Automatically greets anyone who messages your connected assistant account in private DM for the **first time**.
+  - Customizable auto-reply message set by yourself (`/setautomsg` or `.setautomsg`).
+  - Dynamic placeholders: `{name}`, `{first_name}`, `{last_name}`, `{username}`, `{mention}`, `{id}`, `{my_name}`.
+  - Prevents repeated spamming by recording greeted contacts in the database.
+  - Controls to enable/disable (`/automsg on|off`), reset to default (`/resetautomsg`), or clear history (`/cleargreeted`).
 - 👥 **Smart Member Mentions**:
   - `/tag <message>` or `/utag <message>`: Tags all group members in clean batches (default: 5 members per message).
   - `/etag <optional text>`: Tags members decorated with stylish randomized emojis.
@@ -19,7 +25,7 @@ Unlike standard Telegram Bot API bots that are restricted from viewing member li
   - Automatic filtering: skips deleted accounts and bots.
 - ⚡ **Dual Execution Modes**:
   - **Via Bot in Group**: Send `/tag <message>` in group, and the bot instructs your Self ID account to post the tags.
-  - **Direct Selfbot Command**: You can also use prefixes straight from your own account in any group: `.tag <message>`, `.etag`, `.stop`.
+  - **Direct Selfbot Command**: You can also use prefixes straight from your own account: `.tag <message>`, `.etag`, `.setautomsg`, `.automsg`, `.stop`.
 - 🛑 **Instant Stop Control**:
   - `/stop` or `.stop` halts active tagging runs immediately.
 - 🛡️ **FloodWait & Ban Prevention**:
@@ -113,18 +119,33 @@ There are two easy methods:
 | `/admintag <message>` | Tags only group administrators |
 | `/stop` or `/cancel` | Cancels any active tagging in the group |
 
+### 🤖 Assistant Auto DM Responder Commands
+| Command | Description |
+| :--- | :--- |
+| `/setautomsg <text>` | Set custom greeting message for first-time private messages |
+| `/automsg` | View auto-responder status and message preview |
+| `/automsg on` / `/automsg off` | Enable or disable auto responder |
+| `/resetautomsg` | Reset message to the default template |
+| `/cleargreeted` | Clear greeted contacts history so they get greeted again |
+
 ### 👤 Selfbot Direct Prefixes (From your user account)
 | Prefix Command | Description |
 | :--- | :--- |
 | `.tag <message>` | Directly tag group members from your account |
 | `.etag <message>` | Tag members with emojis |
 | `.admintag <message>` | Tag admins |
+| `.setautomsg <text>` | Set auto-responder greeting message from your account |
+| `.automsg` | Check auto-responder status & controls |
+| `.automsg on` / `off` | Enable / disable auto responder |
+| `.resetautomsg` | Reset auto-message to default |
+| `.cleargreeted` | Clear greeted contact history |
+| `.saveit` | Reply to any photo/video to save to Saved Messages |
 | `.stop` | Cancel tagging |
 
 ### 🔒 Private Chat Commands
 | Command | Description |
 | :--- | :--- |
-| `/start` | Open interactive main menu |
+| `/start` | Open interactive main menu with Auto DM Responder controls |
 | `/help` | Detailed command help guide |
 | `/login_phone` | Step-by-step phone & OTP login |
 | `/login <session>` | Quick session string link |
