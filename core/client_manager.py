@@ -117,7 +117,8 @@ class ClientManager:
         async def _self_tag_handler(c: Client, m: Message):
             if m.chat.id > 0:
                 return await m.reply_text("⚠️ **`Tagging can only be used in groups!`**")
-            custom_text = m.text.split(None, 1)[1] if len(m.text.split()) > 1 else "Hey everyone! 👋"
+            html_text = m.text.html if hasattr(m.text, "html") and m.text.html else m.text
+            custom_text = html_text.split(None, 1)[1] if len(m.text.split()) > 1 else "Hey everyone! 👋"
             reply_id = m.reply_to_message_id if m.reply_to_message else None
             await tagger_engine.start_tagging(
                 client=c,
@@ -132,7 +133,8 @@ class ClientManager:
         async def _self_etag_handler(c: Client, m: Message):
             if m.chat.id > 0:
                 return await m.reply_text("⚠️ **`Tagging can only be used in groups!`**")
-            custom_text = m.text.split(None, 1)[1] if len(m.text.split()) > 1 else ""
+            html_text = m.text.html if hasattr(m.text, "html") and m.text.html else m.text
+            custom_text = html_text.split(None, 1)[1] if len(m.text.split()) > 1 else ""
             reply_id = m.reply_to_message_id if m.reply_to_message else None
             await tagger_engine.start_tagging(
                 client=c,
@@ -147,7 +149,8 @@ class ClientManager:
         async def _self_admintag_handler(c: Client, m: Message):
             if m.chat.id > 0:
                 return await m.reply_text("⚠️ **`Tagging can only be used in groups!`**")
-            custom_text = m.text.split(None, 1)[1] if len(m.text.split()) > 1 else "Attention Admins! 🚨"
+            html_text = m.text.html if hasattr(m.text, "html") and m.text.html else m.text
+            custom_text = html_text.split(None, 1)[1] if len(m.text.split()) > 1 else "Attention Admins! 🚨"
             reply_id = m.reply_to_message_id if m.reply_to_message else None
             await tagger_engine.start_tagging(
                 client=c,
@@ -162,7 +165,8 @@ class ClientManager:
         async def _self_ftag_handler(c: Client, m: Message):
             if m.chat.id > 0:
                 return await m.reply_text("⚠️ **`Tagging can only be used in groups!`**")
-            custom_text = m.text.split(None, 1)[1] if len(m.text.split()) > 1 else "Hey bestie! ⭐"
+            html_text = m.text.html if hasattr(m.text, "html") and m.text.html else m.text
+            custom_text = html_text.split(None, 1)[1] if len(m.text.split()) > 1 else "Hey bestie! ⭐"
             reply_id = m.reply_to_message_id if m.reply_to_message else None
             await tagger_engine.start_tagging(
                 client=c,
@@ -233,33 +237,48 @@ class ClientManager:
 
         @client.on_message(filters.me & filters.command(["setautomsg", "setwelcome"], prefixes=[".", "!", "/"]))
         async def _self_set_automsg_handler(c: Client, m: Message):
-            """Direct self command to set auto-responder message."""
+            """Direct self command to set auto-responder message with HTML/custom emoji support."""
+            html_text = m.text.html if hasattr(m.text, "html") and m.text.html else m.text
             new_text = ""
             if len(m.text.split(None, 1)) > 1:
-                new_text = m.text.split(None, 1)[1].strip()
-            elif m.reply_to_message and m.reply_to_message.text:
-                new_text = m.reply_to_message.text.strip()
+                new_text = html_text.split(None, 1)[1].strip()
+            elif m.reply_to_message:
+                target = m.reply_to_message
+                if target.text:
+                    new_text = target.text.html if hasattr(target.text, "html") and target.text.html else target.text
+                elif target.caption:
+                    new_text = target.caption.html if hasattr(target.caption, "html") and target.caption.html else target.caption
+                new_text = (new_text or "").strip()
 
             if not new_text:
                 return await m.reply_text(
                     "⚠️ **`[ Usage: .setautomsg <text> ]`**\n\n"
                     "• **`Example:`** `.setautomsg Hey {name}! Thanks for messaging me. I will reply soon!`\n"
-                    "• **`Or reply to any text message with .setautomsg`**\n\n"
+                    "• **`Or reply to any message (with text, bold, or custom emojis) with .setautomsg`**\n\n"
                     "📌 **`Supported Placeholders:`**\n"
                     "• `{name}` — First name\n"
                     "• `{username}` — @username\n"
                     "• `{mention}` — Clickable mention\n"
                     "• `{id}` — User ID\n"
-                    "• `{my_name}` — Your name"
+                    "• `{my_name}` — Your name\n"
+                    "✨ **`Telegram Premium custom emojis are fully supported!`**"
                 )
 
             user_id = c.me.id
             await set_auto_message_text(user_id, new_text)
-            await m.reply_text(
-                "✅ **`[ Auto DM Message Updated! ]`**\n\n"
-                f"📝 **`New Message:`**\n{new_text}\n\n"
-                "⚡ **`This message will now be sent to anyone who DMs your assistant for the first time.`**"
-            )
+            try:
+                await m.reply_text(
+                    "✅ <b>[ Auto DM Message Updated! ]</b>\n\n"
+                    f"📝 <b>New Message:</b>\n{new_text}\n\n"
+                    "⚡ <i>This message will now be sent to anyone who DMs your assistant for the first time.</i>",
+                    parse_mode=enums.ParseMode.HTML
+                )
+            except Exception:
+                await m.reply_text(
+                    "✅ **`[ Auto DM Message Updated! ]`**\n\n"
+                    f"📝 **`New Message:`**\n{m.text.split(None, 1)[1] if len(m.text.split()) > 1 else new_text}\n\n"
+                    "⚡ **`This message will now be sent to anyone who DMs your assistant for the first time.`**"
+                )
 
         @client.on_message(filters.me & filters.command(["automsg", "getautomsg"], prefixes=[".", "!", "/"]))
         async def _self_automsg_info_handler(c: Client, m: Message):
@@ -282,21 +301,35 @@ class ClientManager:
                     return await m.reply_text(f"🧹 **`Cleared {count} greeted contacts from history! They will be greeted again on their next message.`**")
 
             settings = await get_auto_message_settings(user_id)
-            state_str = "🟢 **`ENABLED`**" if settings["is_enabled"] else "🔴 **`DISABLED`**"
+            state_str = "🟢 <b>ENABLED</b>" if settings["is_enabled"] else "🔴 <b>DISABLED</b>"
             type_str = "Custom" if settings.get("is_custom") else "Default"
 
             msg_preview = settings["message"]
-            await m.reply_text(
-                "🤖 **`[ Assistant Auto DM Settings ]`**\n\n"
-                f"• **`Status:`** {state_str}\n"
-                f"• **`Template Type:`** `{type_str}`\n\n"
-                f"📝 **`Current Message:`**\n{msg_preview}\n\n"
-                "⚙️ **`Controls:`**\n"
-                "• `.automsg on|off` — Enable / Disable\n"
-                "• `.setautomsg <text>` — Change message\n"
-                "• `.resetautomsg` — Reset to default\n"
-                "• `.cleargreeted` — Reset greeted contacts"
-            )
+            try:
+                await m.reply_text(
+                    "🤖 <b>[ Assistant Auto DM Settings ]</b>\n\n"
+                    f"• <b>Status:</b> {state_str}\n"
+                    f"• <b>Template Type:</b> <code>{type_str}</code>\n\n"
+                    f"📝 <b>Current Message:</b>\n{msg_preview}\n\n"
+                    "⚙️ <b>Controls:</b>\n"
+                    "• <code>.automsg on|off</code> — Enable / Disable\n"
+                    "• <code>.setautomsg &lt;text&gt;</code> — Change message\n"
+                    "• <code>.resetautomsg</code> — Reset to default\n"
+                    "• <code>.cleargreeted</code> — Reset greeted contacts",
+                    parse_mode=enums.ParseMode.HTML
+                )
+            except Exception:
+                await m.reply_text(
+                    "🤖 **`[ Assistant Auto DM Settings ]`**\n\n"
+                    f"• **`Status:`** {'🟢 ENABLED' if settings['is_enabled'] else '🔴 DISABLED'}\n"
+                    f"• **`Template Type:`** `{type_str}`\n\n"
+                    f"📝 **`Current Message:`**\n{msg_preview}\n\n"
+                    "⚙️ **`Controls:`**\n"
+                    "• `.automsg on|off` — Enable / Disable\n"
+                    "• `.setautomsg <text>` — Change message\n"
+                    "• `.resetautomsg` — Reset to default\n"
+                    "• `.cleargreeted` — Reset greeted contacts"
+                )
 
         @client.on_message(filters.me & filters.command(["resetautomsg"], prefixes=[".", "!", "/"]))
         async def _self_reset_automsg_handler(c: Client, m: Message):

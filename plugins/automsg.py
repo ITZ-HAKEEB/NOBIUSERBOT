@@ -29,15 +29,21 @@ async def get_effective_assistant_id(user_id: int) -> int:
 
 @Client.on_message(filters.command(["setautomsg", "setwelcome"]))
 async def bot_set_automsg_handler(bot: Client, message: Message):
-    """Set custom auto-responder message via Bot."""
+    """Set custom auto-responder message via Bot with HTML/custom emoji support."""
     user_id = message.from_user.id
     assistant_id = await get_effective_assistant_id(user_id)
 
+    html_text = message.text.html if hasattr(message.text, "html") and message.text.html else message.text
     new_text = ""
     if len(message.command) > 1:
-        new_text = message.text.split(None, 1)[1].strip()
-    elif message.reply_to_message and message.reply_to_message.text:
-        new_text = message.reply_to_message.text.strip()
+        new_text = html_text.split(None, 1)[1].strip()
+    elif message.reply_to_message:
+        target = message.reply_to_message
+        if target.text:
+            new_text = target.text.html if hasattr(target.text, "html") and target.text.html else target.text
+        elif target.caption:
+            new_text = target.caption.html if hasattr(target.caption, "html") and target.caption.html else target.caption
+        new_text = (new_text or "").strip()
 
     if not new_text:
         return await message.reply_text(
@@ -50,18 +56,27 @@ async def bot_set_automsg_handler(bot: Client, message: Message):
             "• `{username}` — @username of sender\n"
             "• `{mention}` — Clickable mention\n"
             "• `{id}` — Sender's Telegram ID\n"
-            "• `{my_name}` — Your assistant account name"
+            "• `{my_name}` — Your assistant account name\n"
+            "✨ **`Telegram Premium custom emojis are fully supported!`**"
         )
 
     await set_auto_message_text(assistant_id, new_text)
     if assistant_id != user_id:
         await set_auto_message_text(user_id, new_text)
 
-    await message.reply_text(
-        "✅ **`[ Auto DM Message Updated! ]`**\n\n"
-        f"📝 **`New Greeting Message:`**\n{new_text}\n\n"
-        "⚡ **`This message will now be automatically sent when someone contacts your assistant in private chat for the first time.`**"
-    )
+    try:
+        await message.reply_text(
+            "✅ <b>[ Auto DM Message Updated! ]</b>\n\n"
+            f"📝 <b>New Greeting Message:</b>\n{new_text}\n\n"
+            "⚡ <i>This message will now be automatically sent when someone contacts your assistant in private chat for the first time.</i>",
+            parse_mode=enums.ParseMode.HTML
+        )
+    except Exception:
+        await message.reply_text(
+            "✅ **`[ Auto DM Message Updated! ]`**\n\n"
+            f"📝 **`New Greeting Message:`**\n{message.text.split(None, 1)[1] if len(message.command) > 1 else new_text}\n\n"
+            "⚡ **`This message will now be automatically sent when someone contacts your assistant in private chat for the first time.`**"
+        )
 
 
 @Client.on_message(filters.command(["automsg", "getautomsg"]))
@@ -92,7 +107,7 @@ async def bot_automsg_info_handler(bot: Client, message: Message):
             return await message.reply_text(f"🧹 **`Cleared {count} contacts from greeted history!`**")
 
     settings = await get_auto_message_settings(assistant_id)
-    state_str = "🟢 **`ENABLED`**" if settings["is_enabled"] else "🔴 **`DISABLED`**"
+    state_str = "🟢 <b>ENABLED</b>" if settings["is_enabled"] else "🔴 <b>DISABLED</b>"
     type_str = "Custom Message" if settings.get("is_custom") else "Default Template"
     msg_preview = settings["message"]
 
@@ -103,18 +118,33 @@ async def bot_automsg_info_handler(bot: Client, message: Message):
         [InlineKeyboardButton(f"🔙 {to_mono('Back to Menu')}", callback_data="btn_back")]
     ])
 
-    await message.reply_text(
-        "🤖 **`[ Assistant Auto DM Responder ]`**\n\n"
-        f"• **`Status:`** {state_str}\n"
-        f"• **`Message Type:`** `{type_str}`\n\n"
-        f"📝 **`Current Auto Message:`**\n{msg_preview}\n\n"
-        "💡 **`Commands:`**\n"
-        "• `/setautomsg <text>` — Customize message\n"
-        "• `/automsg on` / `/automsg off` — Toggle\n"
-        "• `/resetautomsg` — Revert to default\n"
-        "• `/cleargreeted` — Clear greeted list",
-        reply_markup=markup
-    )
+    try:
+        await message.reply_text(
+            "🤖 <b>[ Assistant Auto DM Responder ]</b>\n\n"
+            f"• <b>Status:</b> {state_str}\n"
+            f"• <b>Message Type:</b> <code>{type_str}</code>\n\n"
+            f"📝 <b>Current Auto Message:</b>\n{msg_preview}\n\n"
+            "💡 <b>Commands:</b>\n"
+            "• <code>/setautomsg &lt;text&gt;</code> — Customize message\n"
+            "• <code>/automsg on|off</code> — Toggle\n"
+            "• <code>/resetautomsg</code> — Revert to default\n"
+            "• <code>/cleargreeted</code> — Clear greeted list",
+            reply_markup=markup,
+            parse_mode=enums.ParseMode.HTML
+        )
+    except Exception:
+        await message.reply_text(
+            "🤖 **`[ Assistant Auto DM Responder ]`**\n\n"
+            f"• **`Status:`** {'🟢 ENABLED' if settings['is_enabled'] else '🔴 DISABLED'}\n"
+            f"• **`Message Type:`** `{type_str}`\n\n"
+            f"📝 **`Current Auto Message:`**\n{msg_preview}\n\n"
+            "💡 **`Commands:`**\n"
+            "• `/setautomsg <text>` — Customize message\n"
+            "• `/automsg on` / `/automsg off` — Toggle\n"
+            "• `/resetautomsg` — Revert to default\n"
+            "• `/cleargreeted` — Clear greeted list",
+            reply_markup=markup
+        )
 
 
 @Client.on_message(filters.command(["resetautomsg"]))

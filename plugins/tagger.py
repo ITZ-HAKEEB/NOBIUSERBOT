@@ -45,7 +45,8 @@ async def tag_group_handler(bot: Client, message: Message):
     if not self_client:
         return
 
-    custom_text = message.text.split(None, 1)[1] if len(message.text.split()) > 1 else "Hey everyone! 👋"
+    html_text = message.text.html if hasattr(message.text, "html") and message.text.html else message.text
+    custom_text = html_text.split(None, 1)[1] if len(message.text.split()) > 1 else "Hey everyone! 👋"
     reply_id = message.reply_to_message_id if message.reply_to_message else None
 
     started = await tagger_engine.start_tagging(
@@ -68,7 +69,8 @@ async def etag_group_handler(bot: Client, message: Message):
     if not self_client:
         return
 
-    custom_text = message.text.split(None, 1)[1] if len(message.text.split()) > 1 else ""
+    html_text = message.text.html if hasattr(message.text, "html") and message.text.html else message.text
+    custom_text = html_text.split(None, 1)[1] if len(message.text.split()) > 1 else ""
     reply_id = message.reply_to_message_id if message.reply_to_message else None
 
     started = await tagger_engine.start_tagging(
@@ -91,7 +93,8 @@ async def admintag_group_handler(bot: Client, message: Message):
     if not self_client:
         return
 
-    custom_text = message.text.split(None, 1)[1] if len(message.text.split()) > 1 else "Admins attention needed! 🚨"
+    html_text = message.text.html if hasattr(message.text, "html") and message.text.html else message.text
+    custom_text = html_text.split(None, 1)[1] if len(message.text.split()) > 1 else "Admins attention needed! 🚨"
     reply_id = message.reply_to_message_id if message.reply_to_message else None
 
     started = await tagger_engine.start_tagging(
@@ -114,7 +117,8 @@ async def ftag_group_handler(bot: Client, message: Message):
     if not self_client:
         return
 
-    custom_text = message.text.split(None, 1)[1] if len(message.text.split()) > 1 else "Wake up bestie! ⭐"
+    html_text = message.text.html if hasattr(message.text, "html") and message.text.html else message.text
+    custom_text = html_text.split(None, 1)[1] if len(message.text.split()) > 1 else "Wake up bestie! ⭐"
     reply_id = message.reply_to_message_id if message.reply_to_message else None
 
     started = await tagger_engine.start_tagging(

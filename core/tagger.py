@@ -130,9 +130,9 @@ class TaggerEngine:
                     is_cancelled = True
                     break
 
-                # Prepare mention
-                clean_name = (first_name or "Member").replace("[", "").replace("]", "")
-                mention = f"[{clean_name}](tg://user?id={uid})"
+                # Prepare mention in HTML format
+                clean_name = html.escape((first_name or "Member").replace("<", "").replace(">", ""))
+                mention = f'<a href="tg://user?id={uid}">{clean_name}</a>'
                 batch.append(mention)
 
                 if len(batch) >= config.USERS_PER_TAG:
@@ -205,7 +205,7 @@ class TaggerEngine:
         custom_text: str,
         reply_to_message_id: Optional[int]
     ):
-        """Constructs and delivers a single batch of mentions."""
+        """Constructs and delivers a single batch of mentions in HTML parse mode."""
         if len(batch) == 1:
             user_mention = batch[0]
             if mode == "fav":
@@ -220,24 +220,23 @@ class TaggerEngine:
         else:
             if mode == "fav":
                 mentions_str = " ".join([f"⭐ {m}" for m in batch])
-                text = f"💖 **Favorites:** {custom_text}\n\n{mentions_str}" if custom_text else f"💖 **Favorites:**\n\n{mentions_str}"
+                text = f"💖 <b>Favorites:</b> {custom_text}\n\n{mentions_str}" if custom_text else f"💖 <b>Favorites:</b>\n\n{mentions_str}"
             elif mode == "emoji":
                 mentions_str = " ".join([f"{random.choice(EMOJIS)} {m}" for m in batch])
                 text = f"{custom_text}\n\n{mentions_str}" if custom_text else mentions_str
             elif mode == "admin":
                 mentions_str = "\n".join([f"👮‍♂️ {m}" for m in batch])
-                text = f"🚨 **Admins Call:** {custom_text}\n\n{mentions_str}" if custom_text else f"🚨 **Admins:**\n\n{mentions_str}"
+                text = f"🚨 <b>Admins Call:</b> {custom_text}\n\n{mentions_str}" if custom_text else f"🚨 <b>Admins:</b>\n\n{mentions_str}"
             else:
                 mentions_str = ", ".join(batch)
                 text = f"{custom_text}\n\n{mentions_str}" if custom_text else mentions_str
-
-
 
         while True:
             try:
                 await client.send_message(
                     chat_id=chat_id,
                     text=text,
+                    parse_mode=enums.ParseMode.HTML,
                     disable_web_page_preview=True,
                     reply_to_message_id=reply_to_message_id
                 )
@@ -247,7 +246,17 @@ class TaggerEngine:
                 logger.warning(f"FloodWait hit in {chat_id}: sleeping {wait_time}s")
                 await asyncio.sleep(wait_time)
             except Exception as e:
-                logger.error(f"Failed to send batch in {chat_id}: {e}")
+                logger.warning(f"Failed sending batch in HTML parse mode ({e}), retrying with disabled parse mode")
+                try:
+                    await client.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        parse_mode=enums.ParseMode.DISABLED,
+                        disable_web_page_preview=True,
+                        reply_to_message_id=reply_to_message_id
+                    )
+                except Exception as final_e:
+                    logger.error(f"Failed to send batch in {chat_id}: {final_e}")
                 break
 
 tagger_engine = TaggerEngine()

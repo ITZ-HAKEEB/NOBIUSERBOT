@@ -1,7 +1,9 @@
 import logging
 import asyncio
+import re
+import html
 from typing import Optional
-from pyrogram import Client, errors
+from pyrogram import Client, enums, errors
 from pyrogram.types import Message, User
 from database.db import (
     DEFAULT_AUTO_MESSAGE,
@@ -17,14 +19,30 @@ _auto_msg_lock = asyncio.Lock()
 _processing_peers = set()
 
 
+def normalize_to_html(text: str) -> str:
+    """Normalize custom emoji tags and markdown formatting to valid HTML for Pyrogram."""
+    if not text:
+        return ""
+    # Normalize tg-emoji tags to Pyrogram's <emoji id="..."> tag
+    text = re.sub(r'<tg-emoji\s+emoji-id=[\"\']?(\d+)[\"\']?>', r'<emoji id="\1">', text)
+    text = text.replace('</tg-emoji>', '</emoji>')
+    # Convert markdown links [name](url) to HTML <a href="url">name</a>
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', text)
+    # Convert markdown bold **text** to <b>text</b>
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    # Convert markdown italic __text__ to <i>text</i>
+    text = re.sub(r'__(.+?)__', r'<i>\1</i>', text)
+    return text
+
+
 def format_auto_message(template: str, peer: User, assistant: Optional[User] = None) -> str:
-    """Format the auto-responder template with peer and assistant variables."""
-    first_name = peer.first_name or "Friend"
-    last_name = peer.last_name or ""
+    """Format the auto-responder template with peer and assistant variables in HTML."""
+    first_name = html.escape(peer.first_name or "Friend")
+    last_name = html.escape(peer.last_name or "")
     full_name = f"{first_name} {last_name}".strip()
     username = f"@{peer.username}" if peer.username else first_name
-    mention = f"[{first_name}](tg://user?id={peer.id})"
-    my_name = (assistant.first_name or "Assistant") if assistant else "Assistant"
+    mention = f'<a href="tg://user?id={peer.id}">{first_name}</a>'
+    my_name = html.escape((assistant.first_name or "Assistant") if assistant else "Assistant")
 
     replacements = {
         "{name}": first_name,
@@ -40,14 +58,14 @@ def format_auto_message(template: str, peer: User, assistant: Optional[User] = N
     result = template
     for placeholder, val in replacements.items():
         result = result.replace(placeholder, val)
-    return result
+    return normalize_to_html(result)
 
 
 async def handle_incoming_private_message(client: Client, message: Message):
     """
     Evaluates incoming private message sent to the assistant client.
     If it is the first time the sender messages the assistant, automatically
-    sends the configured greeting message.
+    sends the configured greeting message with full HTML custom emoji support.
     """
     if not message:
         return
@@ -99,27 +117,32 @@ async def handle_incoming_private_message(client: Client, message: Message):
             logger.info(f"[AutoDM] Peer {peer.id} ({peer.first_name}) has already been greeted by assistant {assistant_id}. Skipping.")
             return
 
-        # 3. Format message template
+        # 3. Format message template (supports HTML and custom premium emojis)
         template = settings.get("message") or DEFAULT_AUTO_MESSAGE
         reply_text = format_auto_message(template, peer, assistant)
 
-        logger.info(f"[AutoDM] First-time DM detected! Sending auto-reply to {peer.id} ({peer.first_name}) from assistant {assistant_id}...")
+        logger.info(f"[AutoDM] First-time DM detected! Sending HTML auto-reply to {peer.id} ({peer.first_name}) from assistant {assistant_id}...")
 
         # Small human-like pacing delay
         await asyncio.sleep(0.3)
 
-        # 4. Deliver message: try reply_text first, fallback to send_message
+        # 4. Deliver message: try reply_text in HTML parse mode, fallback to send_message
         sent = False
         try:
-            await message.reply_text(reply_text, disable_web_page_preview=True)
+            await message.reply_text(reply_text, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
             sent = True
         except Exception as err:
-            logger.warning(f"[AutoDM] message.reply_text failed ({err}), attempting client.send_message...")
+            logger.warning(f"[AutoDM] message.reply_text (HTML) failed ({err}), attempting send_message...")
             try:
-                await client.send_message(chat_id=message.chat.id, text=reply_text, disable_web_page_preview=True)
+                await client.send_message(chat_id=message.chat.id, text=reply_text, parse_mode=enums.ParseMode.HTML, disable_web_page_preview=True)
                 sent = True
             except Exception as send_err:
-                logger.error(f"[AutoDM] client.send_message also failed: {send_err}")
+                logger.warning(f"[AutoDM] HTML send failed ({send_err}), falling back to disabled parse mode...")
+                try:
+                    await client.send_message(chat_id=message.chat.id, text=reply_text, parse_mode=enums.ParseMode.DISABLED, disable_web_page_preview=True)
+                    sent = True
+                except Exception as final_err:
+                    logger.error(f"[AutoDM] All message delivery attempts failed: {final_err}")
 
         # 5. Mark as sent once message is successfully delivered
         if sent:

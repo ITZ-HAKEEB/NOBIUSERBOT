@@ -136,8 +136,15 @@ async def test_suite():
         assistant=test_assistant
     )
     assert "Hi Alice (@alicew)!" in formatted
-    assert "[Alice](tg://user?id=111111)" in formatted
+    assert '<a href="tg://user?id=111111">Alice</a>' in formatted
     assert "My name is BobAssistant." in formatted
+
+    # Test custom emoji normalization and formatting
+    emoji_template = 'Hello <tg-emoji emoji-id="54321">👋</tg-emoji> <emoji id="12345">✨</emoji> {mention}'
+    formatted_emoji = format_auto_message(emoji_template, peer=test_peer, assistant=test_assistant)
+    assert '<emoji id="54321">👋</emoji>' in formatted_emoji
+    assert '<emoji id="12345">✨</emoji>' in formatted_emoji
+    assert '<a href="tg://user?id=111111">Alice</a>' in formatted_emoji
 
     # Clear greeted history
     cleared_count = await clear_auto_message_history(assistant_id)

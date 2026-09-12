@@ -489,7 +489,7 @@ async def set_saveit_setting(user_id: int, auto_save: bool):
 DEFAULT_AUTO_MESSAGE = (
     "Hello {name}! 👋\n\n"
     "Thanks for reaching out! I received your message and will get back to you as soon as possible.\n\n"
-    "*(Automated Response)*"
+    "<i>(Automated Response)</i>"
 )
 
 
