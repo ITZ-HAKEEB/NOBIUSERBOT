@@ -7,6 +7,7 @@ async def test_suite():
     print("🧪 Running Self ID Tagger Bot Verification Suite...")
     test_db = "test_tagger.db"
     config.DATABASE_PATH = test_db
+    config.MONGO_URL = ""
 
     from database.db import (
         init_db,

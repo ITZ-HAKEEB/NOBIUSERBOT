@@ -22,9 +22,15 @@ async def init_db():
     if MONGO_URL and "<" not in MONGO_URL and ">" not in MONGO_URL:
         try:
             import motor.motor_asyncio
+            client_kwargs = {"serverSelectionTimeoutMS": 5000}
+            try:
+                import certifi
+                client_kwargs["tlsCAFile"] = certifi.where()
+            except ImportError:
+                pass
             _mongo_client = motor.motor_asyncio.AsyncIOMotorClient(
                 MONGO_URL,
-                serverSelectionTimeoutMS=5000
+                **client_kwargs
             )
             _mongo_db = _mongo_client[DB_NAME]
             # Ping to confirm connection
