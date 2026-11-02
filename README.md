@@ -177,3 +177,8 @@ docker-compose logs -f
 ## ⚖️ Safety & Telegram Terms
 - Ensure your `TAG_DELAY` is not set too low (recommended: 2.0s - 3.0s).
 - Avoid spamming groups where you do not have permission to mention members.
+<p align="center">
+  <a href="https://www.heroku.com/deploy?template=https://github.com/ITZ-HAKEEB/NOBIUSERBOT">
+    <img src="https://img.shields.io/badge/Deploy%20to-Heroku-000000?style=for-the-badge&logo=heroku&logoColor=white" alt="🚀Deploy to Heroku">
+  </a>
+</p>
